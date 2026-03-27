@@ -416,13 +416,13 @@ function buildScreeningRows(matches, includeTheater) {
   // Group by (ss.rank, theater) to collapse multi-day runs
   const groupMap = new Map();
   for (const m of matches) {
-    const key = `${m.ss.rank}__${m.ev.theater}`;
+    const key = `${m.ss.title}__${m.ev.theater}`;
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key).push(m);
   }
   const rendered = new Set();
   return matches.map(m => {
-    const key = `${m.ss.rank}__${m.ev.theater}`;
+    const key = `${m.ss.title}__${m.ev.theater}`;
     if (rendered.has(key)) return '';
     rendered.add(key);
     const group = groupMap.get(key);

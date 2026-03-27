@@ -875,7 +875,9 @@ def fetch_billywilder_events():
     from datetime import timezone, timedelta as td
     today = date.today().strftime('%Y-%m-%d')
     query = ('{ entries(section:"ftvaEvent", limit:200, orderBy:"startDateWithTime ASC",'
-             f' startDateWithTime:">= {today}") {{ title, uri, startDateWithTime }} }}')
+             f' startDateWithTime:">= {today}") {{'
+             ' title, uri, startDateWithTime,'
+             ' ftvaScreeningFormatFilters { title } } }')
     r = requests.post('https://craft.library.ucla.edu/api',
                       json={'query': query}, headers=HEADERS, timeout=20)
     entries = r.json().get('data', {}).get('entries', [])
@@ -901,11 +903,15 @@ def fetch_billywilder_events():
         url = (f'https://www.cinema.ucla.edu/{uri}' if uri
                else 'https://www.cinema.ucla.edu/events')
 
+        fmt_terms = entry.get('ftvaScreeningFormatFilters') or []
+        fmt = ', '.join(f['title'] for f in fmt_terms if f.get('title'))
+
         events.append({
             'theater': 'Billy Wilder Theatre',
             'title':   title,
             'date':    date_str,
             'times':   [time_str],
+            'format':  fmt,
             'url':     url,
             'poster':  None,
             'source':  'billywilder',
