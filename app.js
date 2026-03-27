@@ -187,6 +187,8 @@ function theatersWithMatches() {
 // --- SS250 panel ---
 let ss250Data = null;
 let ss250Loading = false;
+let ss250Query = '';
+let ss250Sort = 'rank';
 
 async function loadSS250Data() {
   if (ss250Data || ss250Loading) return;
@@ -202,6 +204,37 @@ async function loadSS250Data() {
   }
   ss250Loading = false;
   renderSS250Panel();
+}
+
+function renderSS250Grid() {
+  const container = document.getElementById('ss250-grid');
+  if (!container || !ss250Data) return;
+
+  const q = ss250Query.trim().toLowerCase();
+  let films = [...ss250Data];
+  if (q) films = films.filter(f => f.title.toLowerCase().includes(q));
+  if (ss250Sort === 'title') films.sort((a, b) => a.title.localeCompare(b.title));
+  else if (ss250Sort === 'year') films.sort((a, b) => a.year - b.year || a.rank - b.rank);
+  else films.sort((a, b) => a.rank - b.rank);
+
+  if (films.length === 0) {
+    container.innerHTML = `<p class="detail-empty" style="grid-column:1/-1;text-align:center;padding:2rem 0">No films match "${escHtml(ss250Query)}"</p>`;
+    return;
+  }
+
+  container.innerHTML = films.map(f => `
+    <div class="ss250-card">
+      <div class="ss250-poster-wrap">
+        ${f.poster
+          ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
+          : `<div class="ss250-poster-placeholder">🎬</div>`}
+        <span class="ss250-rank">${rankLabel(f.rank)}</span>
+      </div>
+      <div class="ss250-card-info">
+        <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
+        <div class="ss250-card-year">${f.year}</div>
+      </div>
+    </div>`).join('');
 }
 
 function renderSS250Panel() {
@@ -228,23 +261,20 @@ function renderSS250Panel() {
     return;
   }
 
-  const films = [...ss250Data].sort((a, b) => a.rank - b.rank);
-  const cards = films.map(f => `
-    <div class="ss250-card">
-      <div class="ss250-poster-wrap">
-        ${f.poster
-          ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
-          : `<div class="ss250-poster-placeholder">🎬</div>`}
-        <span class="ss250-rank">${rankLabel(f.rank)}</span>
+  const toolbar = `
+    <div class="ss250-toolbar">
+      <input class="ss250-search" type="text" placeholder="Search films…" value="${escHtml(ss250Query)}"
+        oninput="ss250Query=this.value;renderSS250Grid()">
+      <div class="ss250-sort-btns">
+        <button class="ss250-sort-btn${ss250Sort === 'rank'  ? ' active' : ''}" onclick="ss250Sort='rank';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Rank</button>
+        <button class="ss250-sort-btn${ss250Sort === 'title' ? ' active' : ''}" onclick="ss250Sort='title';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Title</button>
+        <button class="ss250-sort-btn${ss250Sort === 'year'  ? ' active' : ''}" onclick="ss250Sort='year';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Year</button>
       </div>
-      <div class="ss250-card-info">
-        <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
-        <div class="ss250-card-year">${f.year}</div>
-      </div>
-    </div>`).join('');
+    </div>`;
 
-  detail.innerHTML = about + `<div class="ss250-grid">${cards}</div>`;
+  detail.innerHTML = about + toolbar + `<div class="ss250-grid" id="ss250-grid"></div>`;
   detail.classList.remove('hidden');
+  renderSS250Grid();
 }
 
 // --- Theater nav ---
