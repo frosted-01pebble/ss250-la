@@ -165,10 +165,16 @@ _FORMAT_RE = re.compile(
     re.IGNORECASE
 )
 
-_BODY_YEAR_RE = re.compile(r'([A-Z\u2019\u2018\u201C\u201D][^\n,]{2,100}?),\s*(\d{4}),\s*Dir\.', re.MULTILINE)
+_BODY_YEAR_RE = re.compile(r'([A-Z\u2019\u2018\u201C\u201D\u00C0-\u024F][^\n,]{2,100}?),\s*(\d{4}),\s*Dir\.', re.MULTILINE)
+
+def _body_key(t):
+    """Normalize a film title for body-year lookup: uppercase, collapse whitespace, strip punctuation."""
+    t = html_lib.unescape(t)
+    t = re.sub(r'[^\w\s]', '', t)   # remove punctuation (apostrophes, hyphens, etc.)
+    return re.sub(r'\s+', ' ', t).upper().strip()
 
 def _extract_body_film_years(body_html):
-    """Parse 'FILM TITLE, YEAR, Dir.' patterns from AC body HTML. Returns {UPPER_TITLE: year}."""
+    """Parse 'FILM TITLE, YEAR, Dir.' patterns from AC body HTML. Returns {normalized_key: year}."""
     if not body_html:
         return {}
     plain = re.sub(r'<[^>]+>', ' ', body_html)
@@ -177,7 +183,7 @@ def _extract_body_film_years(body_html):
     for m in _BODY_YEAR_RE.finditer(plain):
         raw_title = m.group(1).strip()
         year = int(m.group(2))
-        years[raw_title.upper()] = year
+        years[_body_key(raw_title)] = year
     return years
 
 def _enrich_title_with_body_years(title, body_years):
@@ -189,7 +195,7 @@ def _enrich_title_with_body_years(title, body_years):
     new_parts = []
     for part in parts:
         clean = re.sub(r'\s*\(\d{4}\)', '', part).strip()
-        year = body_years.get(clean.upper())
+        year = body_years.get(_body_key(clean))
         if year and not re.search(r'\(\d{4}\)', part):
             new_parts.append(f'{clean} ({year})')
         else:
@@ -247,9 +253,9 @@ def fetch_ac_venue(theater_name, location_term_id):
             acf  = e.get('acf') or {}
             hero = acf.get('event_hero') or {}
 
-            # Title (strip HTML tags/entities)
+            # Title (strip HTML tags, decode entities)
             title = (e.get('title') or {}).get('rendered') or ''
-            title = re.sub(r'<[^>]+>', '', title).strip()
+            title = html_lib.unescape(re.sub(r'<[^>]+>', '', title)).strip()
 
             # Poster
             card_img = acf.get('event_card_image') or {}
