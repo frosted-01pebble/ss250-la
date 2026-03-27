@@ -235,7 +235,7 @@ function renderSS250Panel() {
         ${f.poster
           ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
           : `<div class="ss250-poster-placeholder">🎬</div>`}
-        <span class="ss250-rank">#${f.rank}</span>
+        <span class="ss250-rank">${rankLabel(f.rank)}</span>
       </div>
       <div class="ss250-card-info">
         <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
@@ -317,6 +317,17 @@ function closeDropdown() {
 
 document.addEventListener('click', closeDropdown);
 
+// --- Rank label helper ---
+const _tiedRanks = (() => {
+  const counts = {};
+  SS250.forEach(f => { counts[f.rank] = (counts[f.rank] || 0) + 1; });
+  return new Set(Object.keys(counts).filter(r => counts[r] > 1).map(Number));
+})();
+
+function rankLabel(rank) {
+  return (_tiedRanks.has(rank) ? '=' : '') + rank;
+}
+
 // --- Multi-day run helpers ---
 function dateRangeLabel(dates) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -340,7 +351,7 @@ function buildSingleRow(ev, ss, includeTheater) {
   const partner = doubleFeaturePartner(rawT, ss);
   const ssSecond = ssIsSecondFilm(rawT, ss);
   const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-  const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+  const rankStr = partnerSS ? `${rankLabel(ss.rank)} / ${rankLabel(partnerSS.rank)}` : rankLabel(ss.rank);
   const sep = (partner && !partnerSS) ? ' / ' : ', ';
   const times = (ev.times || []).join(sep);
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
@@ -371,7 +382,7 @@ function buildGroupRow(group, includeTheater) {
   const partner = doubleFeaturePartner(rawT, ss);
   const ssSecond = ssIsSecondFilm(rawT, ss);
   const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-  const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+  const rankStr = partnerSS ? `${rankLabel(ss.rank)} / ${rankLabel(partnerSS.rank)}` : rankLabel(ss.rank);
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
   const scheduleUrl = theater ? theater.scheduleUrl : '#';
