@@ -29,6 +29,7 @@ def _build_cache():
         ('vista',                fetch_vista_events),
         ('academy',              fetch_academy_events),
         ('braindead',            fetch_braindead_events),
+        ('nuart',                fetch_nuart_events),
     ]:
         try:
             results['events'].extend(fetcher())
@@ -417,6 +418,21 @@ def fetch_academy_events():
     return events
 
 
+def _fetch_braindead_format(url):
+    """Fetch a Brain Dead event page and extract the film format."""
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        for label in soup.select('.show-spec-label'):
+            if 'Format' in label.get_text():
+                parent_text = label.parent.get_text(' ', strip=True)
+                fmt = re.sub(r'Format:\s*', '', parent_text, flags=re.IGNORECASE).strip()
+                return fmt
+    except Exception:
+        pass
+    return ''
+
+
 def fetch_braindead_events():
     """Brain Dead Studios — WordPress/Filmbot site; scrape upcoming shows panel."""
     r = requests.get('https://studios.wearebraindead.com', headers=HEADERS, timeout=20)
@@ -427,7 +443,6 @@ def fetch_braindead_events():
     # The upcoming-shows panel lists all future screenings
     panel = soup.find(attrs={'data-type': 'upcoming-shows'})
     if not panel:
-        # Fallback: search the whole page
         panel = soup
 
     for show in panel.select('a.show-link'):
@@ -436,18 +451,15 @@ def fetch_braindead_events():
         if not date_el or not title_el:
             continue
 
-        date_text  = date_el.get_text(strip=True)   # e.g. "Mar 29"
+        date_text  = date_el.get_text(strip=True)
         title_text = re.sub(r'\s+', ' ', title_el.get_text(' ', strip=True))
         parsed     = parse_date_str(date_text)
         if not parsed:
             continue
 
-        # Poster
-        img = show.select_one('img')
+        img        = show.select_one('img')
         poster_url = img.get('src') if img else None
-
-        # URL
-        url = show.get('href') or 'https://studios.wearebraindead.com'
+        url        = show.get('href') or 'https://studios.wearebraindead.com'
 
         events.append({
             'theater': 'Brain Dead Studios',
@@ -456,6 +468,7 @@ def fetch_braindead_events():
             'times':   ['8:00 PM'],
             'url':     url,
             'poster':  poster_url,
+            'format':  '',
             'source':  'braindead',
         })
 
@@ -465,16 +478,11 @@ def fetch_braindead_events():
         title_el = now_panel.select_one('.show__title')
         if title_el:
             title_text = re.sub(r'\s+', ' ', title_el.get_text(' ', strip=True))
-            # Collect showtimes from ol.showtimes
-            times = []
-            for a in now_panel.select('ol.showtimes a.showtime'):
-                t = a.get_text(strip=True)
-                if t:
-                    times.append(t)
-            img = now_panel.select_one('img')
+            times = [a.get_text(strip=True) for a in now_panel.select('ol.showtimes a.showtime') if a.get_text(strip=True)]
+            img        = now_panel.select_one('img')
             poster_url = img.get('src') if img else None
-            link = now_panel.select_one('a[href]')
-            url  = link['href'] if link else 'https://studios.wearebraindead.com'
+            link       = now_panel.select_one('a[href]')
+            url        = link['href'] if link else 'https://studios.wearebraindead.com'
             events.append({
                 'theater': 'Brain Dead Studios',
                 'title':   title_text,
@@ -482,6 +490,7 @@ def fetch_braindead_events():
                 'times':   times or ['8:00 PM'],
                 'url':     url,
                 'poster':  poster_url,
+                'format':  '',
                 'source':  'braindead',
             })
 
@@ -493,7 +502,77 @@ def fetch_braindead_events():
         if key not in seen:
             seen.add(key)
             unique.append(e)
+
+    # Fetch formats in parallel
+    urls = [e['url'] for e in unique]
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        formats = list(ex.map(_fetch_braindead_format, urls))
+    for e, fmt in zip(unique, formats):
+        e['format'] = fmt
+
     return unique
+
+def fetch_nuart_events():
+    """Landmark Nuart Theatre — Gatsby boxofficeapi (scheduledMovies + movies endpoints)."""
+    today_str = date.today().strftime('%Y-%m-%d')
+
+    # Step 1: get movie IDs and their scheduled dates
+    r = requests.get(
+        'https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi/scheduledMovies',
+        params={'theaterId': 'X00CW'}, headers=HEADERS, timeout=20
+    )
+    if r.status_code != 200:
+        return []
+    sched_data = r.json() or {}
+    scheduled_days = sched_data.get('scheduledDays') or {}  # {movieId: [dates]}
+
+    # Filter to upcoming dates only
+    upcoming = {mid: [d for d in days if d >= today_str]
+                for mid, days in scheduled_days.items()}
+    upcoming = {mid: days for mid, days in upcoming.items() if days}
+    if not upcoming:
+        return []
+
+    # Step 2: fetch movie details in batches of 20
+    movie_ids = list(upcoming.keys())
+    movies = {}
+    for i in range(0, len(movie_ids), 20):
+        batch = movie_ids[i:i+20]
+        params = [('basic', 'false'), ('castingLimit', '0')] + [('ids', mid) for mid in batch]
+        r2 = requests.get(
+            'https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi/movies',
+            params=params, headers=HEADERS, timeout=20
+        )
+        if r2.status_code == 200:
+            for m in (r2.json() or []):
+                movies[m['id']] = m
+
+    # Step 3: build events
+    events = []
+    for mid, days in upcoming.items():
+        m = movies.get(mid) or {}
+        title = m.get('title') or mid
+        poster = (m.get('locale') or {}).get('poster', {})
+        poster_url = poster.get('url') if isinstance(poster, dict) else None
+        if not poster_url:
+            poster_url = m.get('poster')
+        path = m.get('path') or ''
+        url = f'https://www.landmarktheatres.com{path}' if path else 'https://www.landmarktheatres.com/theaters/x00cw-landmark-nuart-theatre-west-los-angeles'
+
+        for d in days:
+            events.append({
+                'theater': 'Nuart Theatre',
+                'title':   title,
+                'date':    d,
+                'times':   [],
+                'format':  '',
+                'url':     url,
+                'poster':  poster_url,
+                'source':  'nuart',
+            })
+
+    return events
+
 
 # ── SS250 poster cache ────────────────────────────────────────────────────────
 
