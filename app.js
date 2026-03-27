@@ -124,12 +124,11 @@ function ssIsSecondFilm(rawTitle, ss) {
 }
 
 // Render the partner film portion of a double-feature title.
-// If the partner is also in S&S 250: italic + year inline, same weight as the primary.
-// If not: displayed on its own line in smaller muted text, with year if we have it.
-// ssSecond=true means the S&S film plays second, so the partner "preceded" it.
-function partnerHtml(partner, ssSecond) {
+// partnerSS: pre-computed findSSMatchByTitle result for the partner (or null).
+// If both in S&S 250: italic + year inline separated by " / ", same visual weight.
+// If partner not in S&S: block below, smaller muted text, "followed by" / "preceded by".
+function partnerHtml(partner, ssSecond, partnerSS) {
   if (!partner) return '';
-  const partnerSS = findSSMatchByTitle(partner);
   if (partnerSS) {
     return ` / <em>${escHtml(partnerSS.title)}</em> <span class="screening-year">(${partnerSS.year})</span>`;
   }
@@ -354,7 +353,9 @@ function renderTheaterDetail() {
         const rawT = stripEntities(ev.title);
         const partner = doubleFeaturePartner(rawT, ss);
         const ssSecond = ssIsSecondFilm(rawT, ss);
-        const sep = partner ? ' / ' : ', ';
+        const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+        const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+        const sep = (partner && !partnerSS) ? ' / ' : ', ';
         const times = (ev.times || []).join(sep);
         const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
         const dateLabel = formatScreeningDate(ev.date);
@@ -363,9 +364,9 @@ function renderTheaterDetail() {
         return `
           <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
             <span class="screening-date">${escHtml(dateLabel)}</span>
-            <span class="screening-rank">#${ss.rank}</span>
+            <span class="screening-rank">${escHtml(rankStr)}</span>
             <div class="screening-main">
-              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond)}</div>
+              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
               <div class="screening-meta">
                 <span class="screening-theater">${escHtml(ev.theater)}</span>
                 ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
@@ -407,16 +408,18 @@ function renderTheaterDetail() {
       const rawT = stripEntities(ev.title);
       const partner = doubleFeaturePartner(rawT, ss);
       const ssSecond = ssIsSecondFilm(rawT, ss);
-      const sep = partner ? ' / ' : ', ';
+      const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+      const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+      const sep = (partner && !partnerSS) ? ' / ' : ', ';
       const times = (ev.times || []).join(sep);
       const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
       const dateLabel = formatScreeningDate(ev.date);
       return `
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
-          <span class="screening-rank">#${ss.rank}</span>
+          <span class="screening-rank">${escHtml(rankStr)}</span>
           <div class="screening-main">
-            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond)}</div>
+            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
             <div class="screening-meta">
               ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
               ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
