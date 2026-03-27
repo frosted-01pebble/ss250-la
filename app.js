@@ -324,12 +324,13 @@ function renderTheaterDetail() {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
       const rows = all.map(({ ev, ss }) => {
-        const times = (ev.times || []).join(', ');
-        const fmt = ev.format || '';
+        const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
+        const sep = partner ? ' / ' : ', ';
+        const times = (ev.times || []).join(sep);
+        const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
         const dateLabel = formatScreeningDate(ev.date);
         const theater = LA_THEATERS.find(t => t.name === ev.theater);
         const scheduleUrl = theater ? theater.scheduleUrl : '#';
-        const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
         return `
           <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
             <span class="screening-date">${escHtml(dateLabel)}</span>
@@ -374,10 +375,11 @@ function renderTheaterDetail() {
     detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
   } else {
     const rows = matches.map(({ ev, ss }) => {
-      const times = (ev.times || []).join(', ');
-      const fmt = ev.format || '';
-      const dateLabel = formatScreeningDate(ev.date);
       const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
+      const sep = partner ? ' / ' : ', ';
+      const times = (ev.times || []).join(sep);
+      const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
+      const dateLabel = formatScreeningDate(ev.date);
       return `
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
