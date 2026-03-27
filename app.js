@@ -124,7 +124,7 @@ function partnerHtml(partner) {
   const yearMatch = partner.match(/\((\d{4})\)/);
   const year = yearMatch ? ` (${yearMatch[1]})` : '';
   const cleanTitle = partner.replace(/\s*\(\d{4}\)/, '').trim();
-  return `<span class="screening-partner-line">${escHtml(cleanTitle)}${escHtml(year)}</span>`;
+  return `<span class="screening-partner-line">on a double bill with ${escHtml(cleanTitle)}${escHtml(year)}</span>`;
 }
 
 // --- Helpers ---
