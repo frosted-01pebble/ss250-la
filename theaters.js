@@ -32,8 +32,8 @@ const LA_THEATERS = [
     type: "repertory",
     note: "American Cinematheque — classic & foreign film",
     url: "https://www.americancinematheque.com/egyptian-theatre/",
-    scheduleUrl: "https://www.americancinematheque.com/calendar/",
-    searchUrl: (title, date) => `https://www.americancinematheque.com/calendar/`,
+    scheduleUrl: "https://www.americancinematheque.com/now-showing/",
+    searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
   },
   {
     name: "Aero Theatre",
@@ -41,8 +41,8 @@ const LA_THEATERS = [
     type: "repertory",
     note: "American Cinematheque on the Westside",
     url: "https://www.americancinematheque.com/aero-theatre/",
-    scheduleUrl: "https://www.americancinematheque.com/calendar/",
-    searchUrl: (title, date) => `https://www.americancinematheque.com/calendar/`,
+    scheduleUrl: "https://www.americancinematheque.com/now-showing/",
+    searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
   },
   {
     name: "Los Feliz 3",
@@ -50,8 +50,8 @@ const LA_THEATERS = [
     type: "repertory",
     note: "American Cinematheque — classic & foreign film",
     url: "https://www.americancinematheque.com/los-feliz-theatre/",
-    scheduleUrl: "https://www.americancinematheque.com/calendar/",
-    searchUrl: (title, date) => `https://www.americancinematheque.com/calendar/`,
+    scheduleUrl: "https://www.americancinematheque.com/now-showing/",
+    searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
   },
   {
     name: "Nuart Theatre",

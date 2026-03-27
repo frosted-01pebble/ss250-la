@@ -111,15 +111,23 @@ def expand_date_range(raw):
 
 # ── Scrapers ──────────────────────────────────────────────────────────────────
 
-def fetch_ac_events():
-    """American Cinematheque — WP REST API (custom 'event' post type with ACF)."""
+def fetch_ac_venue(theater_name, location_term_id):
+    """Fetch events for one AC venue using the event_location taxonomy filter.
+
+    Posts are ordered newest-first (desc post date). We fetch posts published
+    in the last 90 days (enough window for freshly-announced upcoming events)
+    and filter by actual event date parsed from hero.dates >= today.
+    """
     events = []
     page = 1
-    today = date.today().strftime('%Y-%m-%dT00:00:00')
+    today_str = date.today().strftime('%Y-%m-%d')
+    after = (date.today() - timedelta(days=90)).strftime('%Y-%m-%dT00:00:00')
+
     while True:
         r = requests.get(
             f"https://www.americancinematheque.com/wp-json/wp/v2/event"
-            f"?per_page=50&page={page}&after={today}&orderby=date&order=asc",
+            f"?per_page=100&page={page}&after={after}&orderby=date&order=desc"
+            f"&event_location={location_term_id}",
             headers=HEADERS, timeout=20
         )
         if r.status_code != 200:
@@ -131,15 +139,8 @@ def fetch_ac_events():
         for e in data:
             acf  = e.get('acf') or {}
             hero = acf.get('event_hero') or {}
-            loc  = acf.get('location_section') or {}
 
-            # Theater name
-            locs = loc.get('locations') or []
-            theater = 'American Cinematheque'
-            if locs and isinstance(locs[0], dict):
-                theater = locs[0].get('location_title') or theater
-
-            # Title (strip HTML entities)
+            # Title (strip HTML tags/entities)
             title = (e.get('title') or {}).get('rendered') or ''
             title = re.sub(r'<[^>]+>', '', title).strip()
 
@@ -147,15 +148,17 @@ def fetch_ac_events():
             card_img = acf.get('event_card_image') or {}
             poster_url = card_img.get('url') if isinstance(card_img, dict) else None
 
-            # Dates — may be range
-            date_raw  = hero.get('dates') or '' if isinstance(hero, dict) else ''
-            time_raw  = hero.get('times') or '' if isinstance(hero, dict) else ''
-            dates     = expand_date_range(date_raw)
-            times     = [t.strip() for t in re.split(r'[/,]', time_raw) if t.strip()]
+            # Dates — may be range; only keep future events
+            date_raw = hero.get('dates') or '' if isinstance(hero, dict) else ''
+            time_raw = hero.get('times') or '' if isinstance(hero, dict) else ''
+            dates    = expand_date_range(date_raw)
+            times    = [t.strip() for t in re.split(r'[/,]', time_raw) if t.strip()]
 
             for d in (dates or [None]):
+                if d and d < today_str:
+                    continue  # skip past events
                 events.append({
-                    'theater': theater,
+                    'theater': theater_name,
                     'title':   title,
                     'date':    d,
                     'times':   times,
@@ -169,6 +172,19 @@ def fetch_ac_events():
             break
         page += 1
 
+    return events
+
+
+def fetch_ac_events():
+    """American Cinematheque — fetch each venue separately by event_location term ID."""
+    venues = [
+        ('Egyptian Theatre',  55),
+        ('Aero Theatre',      54),
+        ('Los Feliz 3',      102),
+    ]
+    events = []
+    for theater_name, term_id in venues:
+        events.extend(fetch_ac_venue(theater_name, term_id))
     return events
 
 
