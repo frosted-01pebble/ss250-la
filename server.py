@@ -80,6 +80,7 @@ def _build_cache():
         ('billywilder',          fetch_billywilder_events),
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
+        ('alamo',                fetch_alamo_events),
     ]:
         try:
             results['events'].extend(fetcher())
@@ -1060,6 +1061,77 @@ def fetch_vidiots_events():
             'url':     g['url'],
             'poster':  poster,
             'source':  'vidiots',
+        })
+
+    return events
+
+
+def fetch_alamo_events():
+    """Alamo Drafthouse DTLA — mother API v2 schedule."""
+    r = requests.get(
+        'https://drafthouse.com/s/mother/v2/schedule/market/1700',
+        headers={**HEADERS, 'User-Agent': 'Mozilla/5.0'},
+        timeout=20,
+    )
+    d = r.json()['data']
+
+    # Build format slug → display title (skip 2d-digital and open-caption)
+    _FORMAT_SLUGS = {f['slug']: f['title'] for f in d.get('formats', [])}
+    _SKIP_FORMATS = {'2d-digital', 'open-caption'}
+
+    # Build presentation lookup: slug → {title, poster, formatSlugs}
+    pres_map = {}
+    for p in d.get('presentations', []):
+        show = p.get('show') or {}
+        title = show.get('title', '') or ''
+        if not title:
+            continue
+        posters = show.get('posterImages') or []
+        poster = posters[0]['uri'] if posters else None
+        pres_map[p['slug']] = {
+            'title': title,
+            'poster': poster,
+            'formatSlugs': p.get('formatSlugs') or [],
+        }
+
+    # Group sessions by (presentationSlug, businessDateClt) → list of showTimeClt
+    groups = {}
+    for s in d.get('sessions', []):
+        if s.get('isHidden'):
+            continue
+        pslug = s['presentationSlug']
+        if pslug not in pres_map:
+            continue
+        bdate = s['businessDateClt']          # "2026-04-08"
+        show_dt_str = s['showTimeClt']         # "2026-04-08T20:00:00"
+        key = (pslug, bdate)
+        groups.setdefault(key, {'times': [], 'formatSlug': s.get('formatSlug', '')})
+        # Parse time
+        dt = datetime.fromisoformat(show_dt_str)
+        time_str = dt.strftime('%-I:%M %p')
+        if time_str not in groups[key]['times']:
+            groups[key]['times'].append(time_str)
+
+    events = []
+    for (pslug, bdate), g in sorted(groups.items(), key=lambda x: x[0]):
+        p = pres_map[pslug]
+        # Determine format: prefer session-level formatSlug, fall back to presentation
+        fslug = g['formatSlug']
+        if fslug in _SKIP_FORMATS:
+            # Check if any non-standard format slug exists on the presentation
+            extra = [fs for fs in p['formatSlugs'] if fs not in _SKIP_FORMATS]
+            fslug = extra[0] if extra else ''
+        fmt = '' if fslug in _SKIP_FORMATS or not fslug else _FORMAT_SLUGS.get(fslug, fslug)
+        url = f'https://drafthouse.com/los-angeles/show/{pslug}'
+        events.append({
+            'theater': 'Alamo Drafthouse DTLA',
+            'title':   p['title'],
+            'date':    bdate,
+            'times':   sorted(g['times']),
+            'format':  fmt,
+            'url':     url,
+            'poster':  p['poster'],
+            'source':  'alamo',
         })
 
     return events
