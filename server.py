@@ -111,6 +111,33 @@ def expand_date_range(raw):
 
 # ── Scrapers ──────────────────────────────────────────────────────────────────
 
+_FORMAT_RE = re.compile(
+    r'\b(70mm|35mm|16mm|4K\s*DCP|2K\s*DCP|DCP|Blu-?ray|digital)\b',
+    re.IGNORECASE
+)
+
+def _extract_ac_format(intro_text, body_text=''):
+    """Pull a film format string from AC intro_text or main_body_text HTML."""
+    # Prefer explicit "FORMAT: ..." label in body
+    for html in (body_text, intro_text):
+        if not html:
+            continue
+        plain = re.sub(r'<[^>]+>', ' ', html)
+        # Explicit label takes priority
+        m = re.search(r'FORMAT:\s*(\S[^\n]{0,30})', plain, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    # Fall back to format keyword anywhere in either field
+    for html in (intro_text, body_text):
+        if not html:
+            continue
+        plain = re.sub(r'<[^>]+>', ' ', html)
+        m = _FORMAT_RE.search(plain)
+        if m:
+            return m.group(0).strip()
+    return ''
+
+
 def fetch_ac_venue(theater_name, location_term_id):
     """Fetch events for one AC venue using the event_location taxonomy filter.
 
@@ -148,6 +175,12 @@ def fetch_ac_venue(theater_name, location_term_id):
             card_img = acf.get('event_card_image') or {}
             poster_url = card_img.get('url') if isinstance(card_img, dict) else None
 
+            # Format — extracted from intro_text or main_body_text
+            intro    = hero.get('intro_text') or '' if isinstance(hero, dict) else ''
+            main_sec = acf.get('event_main_section') or {}
+            body     = main_sec.get('main_body_text') or '' if isinstance(main_sec, dict) else ''
+            fmt      = _extract_ac_format(intro, body)
+
             # Dates — may be range; only keep future events
             date_raw = hero.get('dates') or '' if isinstance(hero, dict) else ''
             time_raw = hero.get('times') or '' if isinstance(hero, dict) else ''
@@ -162,6 +195,7 @@ def fetch_ac_venue(theater_name, location_term_id):
                     'title':   title,
                     'date':    d,
                     'times':   times,
+                    'format':  fmt,
                     'url':     e.get('link') or '',
                     'poster':  poster_url,
                     'source':  'americancinematheque',
