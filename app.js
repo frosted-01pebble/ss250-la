@@ -140,7 +140,6 @@ function theatersWithMatches() {
 // --- Theater nav ---
 function renderTheaterNav() {
   const nav = document.getElementById('theater-nav');
-  const active = scraperLoaded ? theatersWithMatches() : [];
 
   if (!scraperLoaded) {
     nav.innerHTML = '<span class="nav-loading">Loading schedules…</span>';
@@ -148,18 +147,43 @@ function renderTheaterNav() {
     return;
   }
 
-  const allBtn = `<button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>`;
+  const theaterName = selectedTheater && selectedTheater !== '__all__' ? selectedTheater : null;
+  const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
-  nav.innerHTML = allBtn + LA_THEATERS.map(t => `
-    <button class="theater-btn${selectedTheater === t.name ? ' active' : ''}"
-            data-theater="${escHtml(t.name)}">
-      ${escHtml(t.name)}
-    </button>
-  `).join('');
+  nav.innerHTML = `
+    <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
+    <div class="theater-dropdown-wrap">
+      <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
+        ${dropdownLabel} ▾
+      </button>
+      <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
+        ${LA_THEATERS.map(t => `
+          <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
+            ${escHtml(t.name)}
+          </button>`).join('')}
+      </div>
+    </div>`;
 
-  nav.querySelectorAll('.theater-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectedTheater = btn.dataset.theater;
+  const allBtn = nav.querySelector('[data-theater="__all__"]');
+  allBtn.addEventListener('click', () => {
+    selectedTheater = '__all__';
+    closeDropdown();
+    renderTheaterNav();
+    renderTheaterDetail();
+  });
+
+  const dropBtn = nav.querySelector('#theater-dropdown-btn');
+  const menu    = nav.querySelector('#theater-dropdown-menu');
+
+  dropBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('hidden');
+  });
+
+  menu.querySelectorAll('.dropdown-item').forEach(item => {
+    item.addEventListener('click', () => {
+      selectedTheater = item.dataset.theater;
+      closeDropdown();
       renderTheaterNav();
       renderTheaterDetail();
     });
@@ -167,6 +191,13 @@ function renderTheaterNav() {
 
   nav.classList.remove('hidden');
 }
+
+function closeDropdown() {
+  const menu = document.getElementById('theater-dropdown-menu');
+  if (menu) menu.classList.add('hidden');
+}
+
+document.addEventListener('click', closeDropdown);
 
 // --- Theater detail ---
 function renderTheaterDetail() {
