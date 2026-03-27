@@ -444,6 +444,57 @@ def fetch_braindead_events():
             unique.append(e)
     return unique
 
+# ── SS250 poster cache ────────────────────────────────────────────────────────
+
+TMDB_KEY = os.environ.get('TMDB_API_KEY', '8054ed3692dfed2068f4c209e12148a2')
+_ss250_cache = {'data': None, 'fetched_at': 0}
+SS250_CACHE_TTL = 86400  # 24 hours
+
+def _load_ss250_from_js():
+    try:
+        with open('ss250.js', encoding='utf-8') as f:
+            text = f.read()
+        pattern = r'\{\s*rank:\s*(\d+)\s*,\s*title:\s*"([^"]+)"\s*,\s*year:\s*(\d+)\s*\}'
+        return [{'rank': int(r), 'title': t, 'year': int(y)}
+                for r, t, y in re.findall(pattern, text)]
+    except Exception as e:
+        print(f'Failed to parse ss250.js: {e}')
+        return []
+
+def _fetch_one_poster(film):
+    try:
+        r = requests.get(
+            'https://api.themoviedb.org/3/search/movie',
+            params={'api_key': TMDB_KEY, 'query': film['title'],
+                    'year': film['year'], 'language': 'en-US'},
+            headers=HEADERS, timeout=10
+        )
+        results = r.json().get('results', [])
+        for res in results:
+            ry = int((res.get('release_date') or '0')[:4] or 0)
+            if abs(ry - film['year']) <= 2:
+                path = res.get('poster_path')
+                return {**film, 'poster': f'https://image.tmdb.org/t/p/w342{path}' if path else None}
+        if results:
+            path = results[0].get('poster_path')
+            return {**film, 'poster': f'https://image.tmdb.org/t/p/w342{path}' if path else None}
+    except Exception:
+        pass
+    return {**film, 'poster': None}
+
+def _build_ss250_cache():
+    films = _load_ss250_from_js()
+    if not films:
+        return
+    enriched = [None] * len(films)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(_fetch_one_poster, f): i for i, f in enumerate(films)}
+        for fut in as_completed(futures):
+            enriched[futures[fut]] = fut.result()
+    _ss250_cache['data'] = [f for f in enriched if f]
+    _ss250_cache['fetched_at'] = time.time()
+    print(f'SS250 poster cache built — {len(_ss250_cache["data"])} films')
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/api/showtimes')
@@ -452,6 +503,12 @@ def showtimes():
         # Cache not ready yet — build synchronously on first hit
         _build_cache()
     return jsonify(_cache['data'])
+
+@app.route('/api/ss250')
+def ss250_api():
+    if _ss250_cache['data'] is None or time.time() - _ss250_cache['fetched_at'] > SS250_CACHE_TTL:
+        threading.Thread(target=_build_ss250_cache, daemon=True).start() if _ss250_cache['data'] else _build_ss250_cache()
+    return jsonify(_ss250_cache['data'] or [])
 
 @app.route('/health')
 def health():

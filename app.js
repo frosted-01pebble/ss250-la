@@ -137,6 +137,69 @@ function theatersWithMatches() {
   return LA_THEATERS.filter(t => getUpcomingSSForTheater(t.name).length > 0);
 }
 
+// --- SS250 panel ---
+let ss250Data = null;
+let ss250Loading = false;
+
+async function loadSS250Data() {
+  if (ss250Data || ss250Loading) return;
+  ss250Loading = true;
+  const detail = document.getElementById('theater-detail');
+  detail.innerHTML = `<p class="detail-empty" style="padding:3rem 0;text-align:center">Loading full list…</p>`;
+  detail.classList.remove('hidden');
+  try {
+    const res = await fetch('/api/ss250', { signal: AbortSignal.timeout(30000) });
+    ss250Data = await res.json();
+  } catch (e) {
+    ss250Data = [];
+  }
+  ss250Loading = false;
+  renderSS250Panel();
+}
+
+function renderSS250Panel() {
+  const detail = document.getElementById('theater-detail');
+
+  const about = `
+    <div class="ss250-about">
+      <h2 class="ss250-about-title">The Sight &amp; Sound 250</h2>
+      <p>Since 1952, the British Film Institute's <em>Sight &amp; Sound</em> magazine has polled critics,
+      programmers, curators, and academics every decade to name the greatest films ever made. For half
+      a century Orson Welles's <em>Citizen Kane</em> held the top spot almost without interruption —
+      until 2012, when Alfred Hitchcock's <em>Vertigo</em> finally unseated it.</p>
+      <p>The 2022 edition was the most wide-ranging in the poll's history: nearly 1,639 voters from
+      across the globe participated, the largest turnout ever. The result was a seismic upheaval.
+      Chantal Akerman's <em>Jeanne Dielman, 23, quai du Commerce, 1080 Bruxelles</em> rose to #1,
+      making it the first film directed by a woman to lead the list. The poll also expanded from
+      100 to 250 films, opening the canon to more global and contemporary cinema.</p>
+      <p>Below is the full 2022 list — 250 films that, according to the world's leading film minds,
+      represent the pinnacle of cinema. Each title links to its Sight &amp; Sound entry.</p>
+    </div>`;
+
+  if (!ss250Data) {
+    loadSS250Data();
+    return;
+  }
+
+  const films = [...ss250Data].sort((a, b) => a.rank - b.rank);
+  const cards = films.map(f => `
+    <div class="ss250-card">
+      <div class="ss250-poster-wrap">
+        ${f.poster
+          ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
+          : `<div class="ss250-poster-placeholder">🎬</div>`}
+        <span class="ss250-rank">#${f.rank}</span>
+      </div>
+      <div class="ss250-card-info">
+        <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
+        <div class="ss250-card-year">${f.year}</div>
+      </div>
+    </div>`).join('');
+
+  detail.innerHTML = about + `<div class="ss250-grid">${cards}</div>`;
+  detail.classList.remove('hidden');
+}
+
 // --- Theater nav ---
 function renderTheaterNav() {
   const nav = document.getElementById('theater-nav');
@@ -147,7 +210,7 @@ function renderTheaterNav() {
     return;
   }
 
-  const theaterName = selectedTheater && selectedTheater !== '__all__' ? selectedTheater : null;
+  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   nav.innerHTML = `
@@ -162,7 +225,8 @@ function renderTheaterNav() {
             ${escHtml(t.name)}
           </button>`).join('')}
       </div>
-    </div>`;
+    </div>
+    <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
 
   const allBtn = nav.querySelector('[data-theater="__all__"]');
   allBtn.addEventListener('click', () => {
@@ -170,6 +234,13 @@ function renderTheaterNav() {
     closeDropdown();
     renderTheaterNav();
     renderTheaterDetail();
+  });
+
+  nav.querySelector('#ss250-btn').addEventListener('click', () => {
+    selectedTheater = '__ss250__';
+    closeDropdown();
+    renderTheaterNav();
+    renderSS250Panel();
   });
 
   const dropBtn = nav.querySelector('#theater-dropdown-btn');
@@ -205,6 +276,11 @@ function renderTheaterDetail() {
 
   if (!selectedTheater) {
     detail.classList.add('hidden');
+    return;
+  }
+
+  if (selectedTheater === '__ss250__') {
+    renderSS250Panel();
     return;
   }
 
