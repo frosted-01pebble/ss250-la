@@ -346,12 +346,13 @@ function toggleGroup(id) {
   if (arrow) arrow.textContent = (isHidden ? '▶' : '▼') + ' ' + arrow.dataset.count;
 }
 
-function buildSingleRow(ev, ss, includeTheater) {
+function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const rawT = stripEntities(ev.title);
   const partner = doubleFeaturePartner(rawT, ss);
   const ssSecond = ssIsSecondFilm(rawT, ss);
   const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-  const rankStr = partnerSS ? `${rankLabel(ss.rank)} / ${rankLabel(partnerSS.rank)}` : rankLabel(ss.rank);
+  const rl = r => hashRank ? `#${r}` : rankLabel(r);
+  const rankStr = partnerSS ? `${rl(ss.rank)} / ${rl(partnerSS.rank)}` : rl(ss.rank);
   const sep = (partner && !partnerSS) ? ' / ' : ', ';
   const times = (ev.times || []).join(sep);
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
@@ -373,7 +374,7 @@ function buildSingleRow(ev, ss, includeTheater) {
     </a>`;
 }
 
-function buildGroupRow(group, includeTheater) {
+function buildGroupRow(group, includeTheater, hashRank = false) {
   const id = _groupIdCounter++;
   const dates = group.map(m => m.ev.date);
   const rangeLabel = dateRangeLabel(dates);
@@ -382,7 +383,8 @@ function buildGroupRow(group, includeTheater) {
   const partner = doubleFeaturePartner(rawT, ss);
   const ssSecond = ssIsSecondFilm(rawT, ss);
   const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-  const rankStr = partnerSS ? `${rankLabel(ss.rank)} / ${rankLabel(partnerSS.rank)}` : rankLabel(ss.rank);
+  const rl = r => hashRank ? `#${r}` : rankLabel(r);
+  const rankStr = partnerSS ? `${rl(ss.rank)} / ${rl(partnerSS.rank)}` : rl(ss.rank);
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
   const scheduleUrl = theater ? theater.scheduleUrl : '#';
@@ -424,7 +426,7 @@ function buildGroupRow(group, includeTheater) {
     </div>`;
 }
 
-function buildScreeningRowsList(matches, includeTheater) {
+function buildScreeningRowsList(matches, includeTheater, hashRank = false) {
   // Returns array of rendered HTML strings, one per unique (title, theater) group
   const groupMap = new Map();
   for (const m of matches) {
@@ -440,14 +442,14 @@ function buildScreeningRowsList(matches, includeTheater) {
     rendered.add(key);
     const group = groupMap.get(key);
     rows.push(group.length === 1
-      ? buildSingleRow(m.ev, m.ss, includeTheater)
-      : buildGroupRow(group, includeTheater));
+      ? buildSingleRow(m.ev, m.ss, includeTheater, hashRank)
+      : buildGroupRow(group, includeTheater, hashRank));
   }
   return rows;
 }
 
-function buildScreeningRows(matches, includeTheater) {
-  return buildScreeningRowsList(matches, includeTheater).join('');
+function buildScreeningRows(matches, includeTheater, hashRank = false) {
+  return buildScreeningRowsList(matches, includeTheater, hashRank).join('');
 }
 
 // --- Theater detail ---
@@ -497,7 +499,7 @@ function renderTheaterDetail() {
     if (all.length === 0) {
       detail.innerHTML = header + `<p class="detail-empty">${emptyText}</p>`;
     } else {
-      const rows = buildScreeningRowsList(all, true);
+      const rows = buildScreeningRowsList(all, true, true);
       const LIMIT = 12;
       let listHtml;
       if (rows.length <= LIMIT) {
