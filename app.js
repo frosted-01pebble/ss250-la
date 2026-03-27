@@ -119,14 +119,15 @@ function todayStr() {
 }
 
 function formatScreeningDate(dateStr) {
-  // Parse as local date (noon avoids any DST edge cases)
-  const d = new Date(dateStr + 'T12:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((d - today) / 86400000);
+  // Parse date parts directly to avoid timezone/DST fractional-day issues
+  const [y, m, day] = dateStr.split('-').map(Number);
+  const eventDate = new Date(y, m - 1, day); // local midnight
+  const now = new Date();
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // local midnight
+  const diff = Math.round((eventDate - todayDate) / 86400000);
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 // --- Scraper data ---
