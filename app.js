@@ -349,8 +349,9 @@ function renderTheaterDetail() {
         <div class="detail-meta">
           ${escHtml(theater.neighborhood)}
           &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>
-          ${theater.note ? `&nbsp;·&nbsp;<span class="detail-note">${escHtml(theater.note)}</span>` : ''}
+          ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">Est. ${theater.opened}</span>` : ''}
         </div>
+        ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
       </div>
       <a class="detail-schedule-link" href="${theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
     </div>`;
