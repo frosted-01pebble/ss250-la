@@ -17,34 +17,40 @@ function normalizeTitle(t) {
 
 const TITLE_ALIASES = {
   "jeanne dielman 23 quai du commerce 1080 bruxelles": ["jeanne dielman"],
-  "la regle du jeu":         ["the rules of the game", "rules of the game"],
+  "regle du jeu":            ["the rules of the game", "rules of the game"],
   "cleo from 5 to 7":        ["cleo de 5 a 7"],
-  "400 blows":               ["les quatre cents coups", "the 400 blows"],
+  "400 blows":               ["les quatre cents coups", "four hundred blows"],
   "latalante":               ["atalante"],
   "man with a movie camera": ["chelovek s kino-apparatom"],
   "passion of joan of arc":  ["la passion de jeanne darc"],
   "au hasard balthazar":     ["balthazar"],
-  "8":                       ["otto e mezzo", "8 1/2"],
+  "8":                       ["otto e mezzo", "8 1/2", "federico fellini 8"],
   "andrei rublev":           ["andrei rublyov"],
-  "bicycle thieves":         ["ladri di biciclette", "the bicycle thief"],
-  "breathless":              ["a bout de souffle"],
+  "bicycle thieves":         ["ladri di biciclette", "bicycle thief"],
+  "bout de souffle":         ["breathless", "a bout de souffle"],
   "dolce vita":              ["la dolce vita"],
   "avventura":               ["lavventura"],
   "conformist":              ["il conformista"],
   "leopard":                 ["il gattopardo"],
-  "salo or 120 days of sodom": ["salo o le 120 giornate di sodoma"],
-  "spirit of beehive":       ["spirit of the beehive", "el espiritu de la colmena"],
+  "spirit of beehive":       ["el espiritu de la colmena"],
   "spirit of the beehive":   ["el espiritu de la colmena"],
   "werckmeister harmonies":  ["werckmeister harmoniák"],
   "satantango":              ["sátántangó"],
-  "color of pomegranates":   ["sayat nova"],
+  "colour of pomegranates":  ["sayat nova", "color of pomegranates"],
   "touki bouki":             ["journey of the hyena"],
-  "pather panchali":         ["pather panchali"],
-  "ugetsu":                  ["ugetsu monogatari"],
-  "travelling players":      ["o thiasos"],
+  "ugetsu monogatari":       ["ugetsu"],
   "memories of underdevelopment": ["memorias del subdesarrollo"],
-  "black god white devil":   ["deus e o diabo na terra do sol"],
-  "gospel according to matthew": ["il vangelo secondo matteo"],
+  "gospel according to st matthew": ["il vangelo secondo matteo", "gospel according to matthew"],
+  "eclisse":                 ["leclisse", "eclipse"],
+  "mepris":                  ["contempt", "le mepris"],
+  "mulholland dr":           ["mulholland drive"],
+  "beau travail":            ["beau work"],
+  "satantango":              ["satantango", "the satan tango"],
+  "vivre sa vie":            ["my life to live"],
+  "bout de souffle":         ["breathless"],
+  "close-up":                ["close up", "nema-ye nazdik"],
+  "night of the hunter":     ["the night of the hunter"],
+  "fear eats the soul":      ["ali fear eats the soul", "angst essen seele auf"],
 };
 
 function titlesMatch(ssTitle, tmdbTitle, tmdbOrigTitle) {
@@ -305,18 +311,23 @@ function renderTheaterDetail() {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
       const rows = all.map(({ ev, ss }) => {
-        const times = (ev.times || []).join(' · ');
+        const times = (ev.times || []).join(', ');
         const fmt = ev.format || '';
         const dateLabel = formatScreeningDate(ev.date);
         const theater = LA_THEATERS.find(t => t.name === ev.theater);
         const scheduleUrl = theater ? theater.scheduleUrl : '#';
         return `
-          <a class="screening-row all-view" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
+          <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
             <span class="screening-date">${escHtml(dateLabel)}</span>
             <span class="screening-rank">#${ss.rank}</span>
-            <span class="screening-title"><em>${escHtml(ss.title)}</em></span>
-            <span class="screening-theater">${escHtml(ev.theater)}</span>
-            <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
+            <div class="screening-main">
+              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span></div>
+              <div class="screening-meta">
+                <span class="screening-theater">${escHtml(ev.theater)}</span>
+                ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+                ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+              </div>
+            </div>
           </a>`;
       }).join('');
       detail.innerHTML = header + `<div class="screening-list">${rows}</div>`;
@@ -348,15 +359,20 @@ function renderTheaterDetail() {
     detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
   } else {
     const rows = matches.map(({ ev, ss }) => {
-      const times = (ev.times || []).join(' · ');
+      const times = (ev.times || []).join(', ');
       const fmt = ev.format || '';
       const dateLabel = formatScreeningDate(ev.date);
       return `
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
-          <span class="screening-title"><em>${escHtml(ss.title)}</em></span>
-          <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
+          <div class="screening-main">
+            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span></div>
+            <div class="screening-meta">
+              ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+              ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+            </div>
+          </div>
         </a>`;
     }).join('');
 

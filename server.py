@@ -463,19 +463,21 @@ def _load_ss250_from_js():
         return []
 
 def _tmdb_search(query, year=None):
-    """Search TMDB and return best poster_path, trying with and without year."""
+    """Search TMDB by title. Uses primary_release_year for accuracy."""
     params = {'api_key': TMDB_KEY, 'query': query, 'language': 'en-US'}
     if year:
-        params['year'] = year
+        params['primary_release_year'] = year
     try:
         r = requests.get('https://api.themoviedb.org/3/search/movie',
                          params=params, headers=HEADERS, timeout=10)
         results = r.json().get('results', [])
+        # Prefer results whose year is within ±2 of target
         if year:
             for res in results:
-                ry = int((res.get('release_date') or '0')[:4] or 0)
+                ry = int((res.get('release_date') or '0000')[:4] or 0)
                 if abs(ry - year) <= 2 and res.get('poster_path'):
                     return res['poster_path']
+            return None  # strict: don't return wrong-year result
         if results and results[0].get('poster_path'):
             return results[0]['poster_path']
     except Exception:
@@ -484,10 +486,19 @@ def _tmdb_search(query, year=None):
 
 def _fetch_one_poster(film):
     title, year = film['title'], film['year']
-    # Try with year first, then without year, then with cleaned title
-    path = _tmdb_search(title, year) or _tmdb_search(title) or _tmdb_search(
-        re.sub(r'^(The|A|An|La|Le|Les|L\'|Un|Une|Des|Il|Lo|El)\s+', '', title, flags=re.I), year
-    )
+    # 1. Exact year match
+    path = _tmdb_search(title, year)
+    # 2. Widen year by ±1 (catches off-by-one in TMDB data)
+    if not path:
+        path = _tmdb_search(title, year - 1) or _tmdb_search(title, year + 1)
+    # 3. Strip leading article and retry
+    if not path:
+        alt = re.sub(r'^(The|A|An|La|Le|Les|L\'|Un|Une|Des|Il|Lo|El)\s+', '', title, flags=re.I)
+        if alt != title:
+            path = _tmdb_search(alt, year)
+    # 4. No year constraint (last resort — only if nothing else works)
+    if not path:
+        path = _tmdb_search(title)
     poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
     return {**film, 'poster': poster}
 
