@@ -4,6 +4,7 @@ const SCRAPER_URL = '/api/showtimes';
 let scraperEvents = [];
 let scraperLoaded = false;
 let selectedTheater = null;
+let filmFilterActive = false;
 let _groupIdCounter = 0;
 
 // --- Title normalization ---
@@ -256,7 +257,7 @@ function renderTheaterNav() {
     return;
   }
 
-  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' && selectedTheater !== '__film__' ? selectedTheater : null;
+  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   nav.innerHTML = `
@@ -452,61 +453,30 @@ function renderTheaterDetail() {
     return;
   }
 
-  // "On Film" view
-  if (selectedTheater === '__film__') {
-    const today = todayStr();
-    const _FILM_RE = /\b(16mm|35mm|70mm)\b/i;
-    const all = scraperEvents
-      .filter(e => e.date >= today && _FILM_RE.test(e.format || ''))
-      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
-      .filter(({ ss }) => ss !== null)
-      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank);
-
-    const header = `
-      <div class="detail-header">
-        <div class="detail-header-left">
-          <div class="detail-theater-name">On Film</div>
-          <div class="detail-meta">Upcoming Sight &amp; Sound screenings on 16mm, 35mm, or 70mm</div>
-        </div>
-      </div>`;
-
-    if (all.length === 0) {
-      detail.innerHTML = header + `<p class="detail-empty">No upcoming film screenings found.</p>`;
-    } else {
-      const rows = buildScreeningRowsList(all, true);
-      const LIMIT = 12;
-      let listHtml;
-      if (rows.length <= LIMIT) {
-        listHtml = rows.join('');
-      } else {
-        const moreCount = rows.length - LIMIT;
-        listHtml = rows.slice(0, LIMIT).join('')
-          + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
-          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all — ${moreCount} more</button>`;
-      }
-      detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
-    }
-    detail.classList.remove('hidden');
-    return;
-  }
+  // Reset film filter when leaving All Upcoming
+  if (selectedTheater !== '__all__') filmFilterActive = false;
 
   // "All Upcoming" view
   if (selectedTheater === '__all__') {
     const today = todayStr();
+    const _FILM_RE = /\b(16mm|35mm|70mm)\b/i;
     const all = scraperEvents
-      .filter(e => e.date >= today)
+      .filter(e => e.date >= today && (!filmFilterActive || _FILM_RE.test(e.format || '')))
       .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
       .filter(({ ss }) => ss !== null)
       .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank);
 
+    const metaText = filmFilterActive
+      ? 'Upcoming screenings on 16mm, 35mm &amp; 70mm'
+      : 'Every Sight &amp; Sound screening across all LA venues';
     const header = `
       <div class="detail-header">
         <div class="detail-header-left">
           <div class="detail-title-row">
             <div class="detail-theater-name">All Upcoming</div>
-            <button class="theater-btn film-btn" onclick="selectedTheater='__film__';renderTheaterNav();renderTheaterDetail()">ON FILM</button>
+            <button class="theater-btn film-btn${filmFilterActive ? ' film-active' : ''}" onclick="filmFilterActive=!filmFilterActive;renderTheaterDetail()">ON FILM</button>
           </div>
-          <div class="detail-meta">Every Sight &amp; Sound screening across all LA venues</div>
+          <div class="detail-meta">${metaText}</div>
         </div>
       </div>`;
 
