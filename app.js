@@ -260,35 +260,23 @@ function renderTheaterNav() {
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   nav.innerHTML = `
-    <div class="nav-row-main">
-      <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
-      <div class="theater-dropdown-wrap">
-        <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
-          ${dropdownLabel} ▾
-        </button>
-        <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
-          ${LA_THEATERS.map(t => `
-            <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
-              ${escHtml(t.name)}
-            </button>`).join('')}
-        </div>
+    <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
+    <div class="theater-dropdown-wrap">
+      <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
+        ${dropdownLabel} ▾
+      </button>
+      <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
+        ${LA_THEATERS.map(t => `
+          <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
+            ${escHtml(t.name)}
+          </button>`).join('')}
       </div>
-      <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>
     </div>
-    <div class="nav-row-sub">
-      <button class="theater-btn film-btn${selectedTheater === '__film__' ? ' film-active' : ''}" id="film-btn">ON FILM</button>
-    </div>`;
+    <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
 
   const allBtn = nav.querySelector('[data-theater="__all__"]');
   allBtn.addEventListener('click', () => {
     selectedTheater = '__all__';
-    closeDropdown();
-    renderTheaterNav();
-    renderTheaterDetail();
-  });
-
-  nav.querySelector('#film-btn').addEventListener('click', () => {
-    selectedTheater = '__film__';
     closeDropdown();
     renderTheaterNav();
     renderTheaterDetail();
@@ -514,7 +502,10 @@ function renderTheaterDetail() {
     const header = `
       <div class="detail-header">
         <div class="detail-header-left">
-          <div class="detail-theater-name">All Upcoming</div>
+          <div class="detail-title-row">
+            <div class="detail-theater-name">All Upcoming</div>
+            <button class="theater-btn film-btn" onclick="selectedTheater='__film__';renderTheaterNav();renderTheaterDetail()">ON FILM</button>
+          </div>
           <div class="detail-meta">Every Sight &amp; Sound screening across all LA venues</div>
         </div>
       </div>`;

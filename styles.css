@@ -40,26 +40,16 @@ header h1 span { color: var(--accent); font-style: italic; }
 /* ── Theater nav ── */
 .theater-nav {
   display: flex;
-  flex-direction: column;
-  padding: 0.75rem 1.5rem 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 2rem;
   position: sticky;
   top: 0;
   background: var(--bg);
   z-index: 10;
-}
-.nav-row-main {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: center;
-  padding-bottom: 0.5rem;
-}
-.nav-row-sub {
-  display: flex;
-  justify-content: flex-end;
-  padding-bottom: 0.25rem;
 }
 .theater-btn {
   background: none;
@@ -145,10 +135,15 @@ header h1 span { color: var(--accent); font-style: italic; }
   border-bottom: 1px solid var(--border);
 }
 .detail-header-left { flex: 1; }
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.3rem;
+}
 .detail-theater-name {
   font-size: 1.2rem;
   font-weight: bold;
-  margin-bottom: 0.3rem;
 }
 .detail-meta {
   font-size: 0.78rem;
