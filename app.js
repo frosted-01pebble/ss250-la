@@ -260,20 +260,24 @@ function renderTheaterNav() {
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   nav.innerHTML = `
-    <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
-    <button class="theater-btn film-btn${selectedTheater === '__film__' ? ' film-active' : ''}" id="film-btn">ON FILM</button>
-    <div class="theater-dropdown-wrap">
-      <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
-        ${dropdownLabel} ▾
-      </button>
-      <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
-        ${LA_THEATERS.map(t => `
-          <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
-            ${escHtml(t.name)}
-          </button>`).join('')}
+    <div class="nav-row-main">
+      <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
+      <div class="theater-dropdown-wrap">
+        <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
+          ${dropdownLabel} ▾
+        </button>
+        <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
+          ${LA_THEATERS.map(t => `
+            <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
+              ${escHtml(t.name)}
+            </button>`).join('')}
+        </div>
       </div>
+      <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>
     </div>
-    <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
+    <div class="nav-row-sub">
+      <button class="theater-btn film-btn${selectedTheater === '__film__' ? ' film-active' : ''}" id="film-btn">ON FILM</button>
+    </div>`;
 
   const allBtn = nav.querySelector('[data-theater="__all__"]');
   allBtn.addEventListener('click', () => {
