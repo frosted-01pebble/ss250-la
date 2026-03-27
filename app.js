@@ -109,8 +109,19 @@ function doubleFeaturePartner(rawTitle, ss) {
   if (!sep) return '';
   const parts = rawTitle.split(sep).map(p => p.trim()).filter(Boolean);
   if (parts.length < 2) return '';
-  // Return the part(s) that are NOT the matched SS film
   return parts.filter(p => !titlesMatch(ss.title, p, '')).join(' / ');
+}
+
+// Render the partner film portion of a double-feature title.
+// If the partner is also in S&S 250: italic + year, same visual weight as the primary.
+// If not: smaller muted text.
+function partnerHtml(partner) {
+  if (!partner) return '';
+  const partnerSS = findSSMatchByTitle(partner);
+  if (partnerSS) {
+    return ` / <em>${escHtml(partnerSS.title)}</em> <span class="screening-year">(${partnerSS.year})</span>`;
+  }
+  return ` <span class="screening-partner">/ ${escHtml(partner)}</span>`;
 }
 
 // --- Helpers ---
@@ -336,7 +347,7 @@ function renderTheaterDetail() {
             <span class="screening-date">${escHtml(dateLabel)}</span>
             <span class="screening-rank">#${ss.rank}</span>
             <div class="screening-main">
-              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partner ? ` <span class="screening-partner">/ ${escHtml(partner)}</span>` : ''}</div>
+              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner)}</div>
               <div class="screening-meta">
                 <span class="screening-theater">${escHtml(ev.theater)}</span>
                 ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
@@ -385,7 +396,7 @@ function renderTheaterDetail() {
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
           <div class="screening-main">
-            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partner ? ` <span class="screening-partner">/ ${escHtml(partner)}</span>` : ''}</div>
+            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner)}</div>
             <div class="screening-meta">
               ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
               ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
