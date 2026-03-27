@@ -230,7 +230,7 @@ function renderSS250Grid() {
             ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
             : `<div class="ss250-poster-placeholder">🎬</div>`}
           <span class="ss250-rank">${rankLabel(f.rank)}</span>
-          ${f.overview ? `<div class="ss250-overview">${escHtml(f.overview)}</div>` : ''}
+          ${f.overview ? `<div class="ss250-overview">${escHtml((f.overview.match(/^.*?[.!?](?:\s|$)/) || [f.overview])[0].trim())}</div>` : ''}
         </div>
       </a>
       <div class="ss250-card-info">
