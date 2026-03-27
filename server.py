@@ -326,7 +326,8 @@ def fetch_academy_events():
         img       = prog.get('image') or {}
         poster    = img.get('url') if isinstance(img, dict) else None
         tk_id     = prog.get('ticketureIdProduction') or prog.get('ticketureId') or ''
-        url       = f'https://tickets.academymuseum.org/events/{tk_id}' if tk_id else \
+        slug      = prog.get('slug') or ''
+        url       = f'https://www.academymuseum.org/programs/detail/{slug}' if slug else \
                     'https://www.academymuseum.org/en/calendar'
         fmt       = prog.get('filmFormat1') or prog.get('filmFormat2') or ''
 
@@ -461,26 +462,34 @@ def _load_ss250_from_js():
         print(f'Failed to parse ss250.js: {e}')
         return []
 
-def _fetch_one_poster(film):
+def _tmdb_search(query, year=None):
+    """Search TMDB and return best poster_path, trying with and without year."""
+    params = {'api_key': TMDB_KEY, 'query': query, 'language': 'en-US'}
+    if year:
+        params['year'] = year
     try:
-        r = requests.get(
-            'https://api.themoviedb.org/3/search/movie',
-            params={'api_key': TMDB_KEY, 'query': film['title'],
-                    'year': film['year'], 'language': 'en-US'},
-            headers=HEADERS, timeout=10
-        )
+        r = requests.get('https://api.themoviedb.org/3/search/movie',
+                         params=params, headers=HEADERS, timeout=10)
         results = r.json().get('results', [])
-        for res in results:
-            ry = int((res.get('release_date') or '0')[:4] or 0)
-            if abs(ry - film['year']) <= 2:
-                path = res.get('poster_path')
-                return {**film, 'poster': f'https://image.tmdb.org/t/p/w342{path}' if path else None}
-        if results:
-            path = results[0].get('poster_path')
-            return {**film, 'poster': f'https://image.tmdb.org/t/p/w342{path}' if path else None}
+        if year:
+            for res in results:
+                ry = int((res.get('release_date') or '0')[:4] or 0)
+                if abs(ry - year) <= 2 and res.get('poster_path'):
+                    return res['poster_path']
+        if results and results[0].get('poster_path'):
+            return results[0]['poster_path']
     except Exception:
         pass
-    return {**film, 'poster': None}
+    return None
+
+def _fetch_one_poster(film):
+    title, year = film['title'], film['year']
+    # Try with year first, then without year, then with cleaned title
+    path = _tmdb_search(title, year) or _tmdb_search(title) or _tmdb_search(
+        re.sub(r'^(The|A|An|La|Le|Les|L\'|Un|Une|Des|Il|Lo|El)\s+', '', title, flags=re.I), year
+    )
+    poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
+    return {**film, 'poster': poster}
 
 def _build_ss250_cache():
     films = _load_ss250_from_js()
