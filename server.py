@@ -11,6 +11,7 @@ from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 import json, re, traceback, threading, time, os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 
 app = Flask(__name__, static_folder='.')
@@ -261,8 +262,30 @@ def _extract_rich_text(node):
     return ''.join(parts).strip()
 
 
+def _fetch_academy_session_time(tk_id):
+    """Fetch the showtime for one Academy Museum event from Ticketure API."""
+    try:
+        r = requests.get(
+            f'https://tickets.academymuseum.org/api/events/{tk_id}/sessions',
+            headers=HEADERS, timeout=10
+        )
+        sessions = r.json().get('event_session', {}).get('_data', [])
+        if sessions:
+            start_utc = sessions[0].get('start_datetime', '')
+            if start_utc:
+                dt_utc = datetime.fromisoformat(start_utc.replace('Z', '+00:00'))
+                # Convert UTC → US/Pacific (approximate: UTC-7 PDT / UTC-8 PST)
+                from datetime import timezone, timedelta as td
+                offset = td(hours=-7) if 3 <= dt_utc.month <= 10 else td(hours=-8)
+                dt_local = dt_utc.astimezone(timezone(offset))
+                return dt_local.strftime('%-I:%M %p')
+    except Exception:
+        pass
+    return None
+
+
 def fetch_academy_events():
-    """Academy Museum — Next.js __NEXT_DATA__ embedded JSON on the calendar page."""
+    """Academy Museum — Next.js __NEXT_DATA__ + Ticketure session times."""
     r = requests.get('https://www.academymuseum.org/en/calendar', headers=HEADERS, timeout=20)
     m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
                   r.text, re.DOTALL)
@@ -272,15 +295,15 @@ def fetch_academy_events():
     programs = (data.get('props', {})
                     .get('pageProps', {})
                     .get('cfProgramsKeyedByTkId', {}))
-    events = []
     today = date.today()
+
+    # First pass: collect candidate programs
+    candidates = []
     for prog in programs.values():
         start_raw = prog.get('activeStartDate') or ''
         end_raw   = prog.get('activeEndDate')   or start_raw
         if not start_raw:
             continue
-
-        # Parse ISO dates and expand range
         try:
             d0 = datetime.fromisoformat(start_raw.replace('Z', '+00:00')).date()
             d1 = datetime.fromisoformat(end_raw.replace('Z', '+00:00')).date()
@@ -288,8 +311,9 @@ def fetch_academy_events():
             continue
         if d1 < today:
             continue
+        if (d1 - d0).days > 7:
+            continue
 
-        # Extract title from Contentful rich-text JSON
         title_field = prog.get('programTitle') or prog.get('title') or {}
         if isinstance(title_field, dict):
             title = _extract_rich_text(title_field.get('json') or title_field)
@@ -299,29 +323,42 @@ def fetch_academy_events():
         if not title:
             continue
 
-        # Poster image
-        img = prog.get('image') or {}
-        poster_url = img.get('url') if isinstance(img, dict) else None
+        img       = prog.get('image') or {}
+        poster    = img.get('url') if isinstance(img, dict) else None
+        tk_id     = prog.get('ticketureIdProduction') or prog.get('ticketureId') or ''
+        url       = f'https://tickets.academymuseum.org/events/{tk_id}' if tk_id else \
+                    'https://www.academymuseum.org/en/calendar'
+        fmt       = prog.get('filmFormat1') or prog.get('filmFormat2') or ''
 
-        # Slug → URL
-        slug = prog.get('slug') or ''
-        url  = f'https://www.academymuseum.org/en/programs/{slug}' if slug else \
-               'https://www.academymuseum.org/en/calendar'
+        candidates.append({'title': title, 'd0': d0, 'd1': d1,
+                           'tk_id': tk_id, 'url': url,
+                           'poster': poster, 'format': fmt})
 
-        # Only expand date ranges up to 7 days; longer ranges are exhibitions not screenings
-        span = (d1 - d0).days
-        if span > 7:
-            continue
+    # Fetch session times in parallel
+    tk_to_time = {}
+    ids = [c['tk_id'] for c in candidates if c['tk_id']]
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(_fetch_academy_session_time, tk_id): tk_id for tk_id in ids}
+        for fut in as_completed(futures):
+            tk_id = futures[fut]
+            t = fut.result()
+            if t:
+                tk_to_time[tk_id] = t
 
-        cur = d0
-        while cur <= d1:
+    # Build events
+    events = []
+    for c in candidates:
+        times = [tk_to_time[c['tk_id']]] if c['tk_id'] in tk_to_time else []
+        cur = c['d0']
+        while cur <= c['d1']:
             events.append({
                 'theater': 'Academy Museum',
-                'title':   title,
+                'title':   c['title'],
                 'date':    cur.strftime('%Y-%m-%d'),
-                'times':   [],
-                'url':     url,
-                'poster':  poster_url,
+                'times':   times,
+                'format':  c['format'],
+                'url':     c['url'],
+                'poster':  c['poster'],
                 'source':  'academy',
             })
             cur += timedelta(days=1)

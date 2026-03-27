@@ -1,10 +1,6 @@
-const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
-const LS_KEY = 'ss_tmdb_api_key';
 const SCRAPER_URL = '/api/showtimes';
 
 // --- State ---
-let currentApiKey = '';
-let cachedNowPlaying = null;
 let scraperEvents = [];
 let scraperLoaded = false;
 let selectedTheater = null;
@@ -204,6 +200,7 @@ function renderTheaterDetail() {
       const rows = all.map(({ ev, ss }) => {
         const cleanTitle = stripEntities(ev.title);
         const times = (ev.times || []).join(' · ');
+        const fmt = ev.format || '';
         const dateLabel = formatScreeningDate(ev.date);
         const theater = LA_THEATERS.find(t => t.name === ev.theater);
         const scheduleUrl = theater ? theater.scheduleUrl : '#';
@@ -213,7 +210,7 @@ function renderTheaterDetail() {
             <span class="screening-rank">#${ss.rank}</span>
             <span class="screening-title">${escHtml(cleanTitle)}</span>
             <span class="screening-theater">${escHtml(ev.theater)}</span>
-            ${times ? `<span class="screening-time">${escHtml(times)}</span>` : '<span class="screening-time"></span>'}
+            <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
           </a>`;
       }).join('');
       detail.innerHTML = header + `<div class="screening-list">${rows}</div>`;
@@ -247,13 +244,14 @@ function renderTheaterDetail() {
     const rows = matches.map(({ ev, ss }) => {
       const cleanTitle = stripEntities(ev.title);
       const times = (ev.times || []).join(' · ');
+      const fmt = ev.format || '';
       const dateLabel = formatScreeningDate(ev.date);
       return `
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
           <span class="screening-title">${escHtml(cleanTitle)}</span>
-          ${times ? `<span class="screening-time">${escHtml(times)}</span>` : '<span class="screening-time"></span>'}
+          <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
         </a>`;
     }).join('');
 
@@ -263,91 +261,6 @@ function renderTheaterDetail() {
   detail.classList.remove('hidden');
 }
 
-// --- TMDB ---
-function movieCard(movie, ssMatch, compact = false) {
-  const poster = movie.poster_path
-    ? `<img src="${TMDB_IMAGE_BASE}${movie.poster_path}" alt="${escHtml(movie.title)}" loading="lazy">`
-    : `<div class="poster-placeholder">🎬</div>`;
-  const badge = ssMatch ? `<span class="ss-badge">#${ssMatch.rank}</span>` : '';
-  const rankLine = ssMatch ? `<div class="card-rank">S&amp;S #${ssMatch.rank} &middot; ${ssMatch.year}</div>` : '';
-  const year = movie.release_date ? movie.release_date.slice(0, 4) : '';
-  return `
-    <div class="movie-card${ssMatch ? ' ss-match' : ''}">
-      <div class="poster-wrap">${poster}${badge}</div>
-      <div class="card-info">
-        <div class="card-title">${escHtml(movie.title)}</div>
-        <div class="card-meta">${year}</div>
-        ${rankLine}
-      </div>
-    </div>`;
-}
-
-async function fetchAllPages(url) {
-  const all = [];
-  let page = 1, totalPages = 1;
-  while (page <= totalPages && page <= 10) {
-    const res = await fetch(`${url}&page=${page}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.status_message || `HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    totalPages = data.total_pages || 1;
-    all.push(...(data.results || []));
-    page++;
-  }
-  return all;
-}
-
-async function loadAndRender() {
-  const statusEl  = document.getElementById('status');
-  const resultsEl = document.getElementById('results');
-
-  statusEl.className = 'status';
-  statusEl.textContent = 'Loading wide-release data…';
-  statusEl.classList.remove('hidden');
-  resultsEl.classList.add('hidden');
-
-  try {
-    if (!cachedNowPlaying) {
-      cachedNowPlaying = await fetchAllPages(
-        `https://api.themoviedb.org/3/movie/now_playing?api_key=${currentApiKey}&language=en-US&region=US`
-      );
-    }
-    const movies = cachedNowPlaying;
-
-    const matched = [], unmatched = [];
-    for (const m of movies) {
-      const ss = findSSMatch(m);
-      if (ss) matched.push({ movie: m, ss });
-      else unmatched.push({ movie: m, ss: null });
-    }
-    matched.sort((a, b) => a.ss.rank - b.ss.rank);
-    unmatched.sort((a, b) => a.movie.title.localeCompare(b.movie.title));
-
-    document.getElementById('matches-count').textContent =
-      matched.length === 0
-        ? 'No Sight & Sound films in wide release'
-        : `${matched.length} Sight & Sound film${matched.length !== 1 ? 's' : ''} in wide release`;
-
-    document.getElementById('now-playing-count').textContent = movies.length;
-    document.getElementById('matches-grid').innerHTML = matched.map(({ movie, ss }) => movieCard(movie, ss)).join('');
-    document.getElementById('no-matches').classList.toggle('hidden', matched.length > 0);
-    document.getElementById('now-playing-grid').innerHTML = [...matched, ...unmatched]
-      .map(({ movie, ss }) => movieCard(movie, ss, true)).join('');
-
-    statusEl.classList.add('hidden');
-    resultsEl.classList.remove('hidden');
-
-  } catch (e) {
-    statusEl.className = 'status error';
-    const isKeyError = e.message.toLowerCase().includes('api key') || e.message.includes('401');
-    statusEl.innerHTML = isKeyError
-      ? `Invalid TMDB API key. Use the <strong>API Key (v3 auth)</strong> — the short alphanumeric key from <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>, not the long JWT token.`
-      : `Error: ${e.message}`;
-    if (isKeyError) localStorage.removeItem(LS_KEY);
-  }
-}
 
 // --- Load scraper data ---
 async function loadScraperData() {
@@ -362,14 +275,6 @@ async function loadScraperData() {
     scraperLoaded = false;
     console.log('Scraper backend not available');
   }
-}
-
-// --- Boot ---
-async function run(apiKey) {
-  currentApiKey = apiKey;
-  cachedNowPlaying = null;
-  localStorage.setItem(LS_KEY, apiKey);
-  loadAndRender();
 }
 
 async function initPage() {
@@ -387,20 +292,4 @@ async function initPage() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const input = document.getElementById('api-key-input');
-  const btn   = document.getElementById('load-btn');
-
-  const saved = localStorage.getItem(LS_KEY);
-  if (saved) input.value = saved;
-
-  btn.addEventListener('click', () => {
-    const key = input.value.trim();
-    if (!key) { input.focus(); return; }
-    run(key);
-  });
-
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
-
-  initPage();
-});
+document.addEventListener('DOMContentLoaded', initPage);
