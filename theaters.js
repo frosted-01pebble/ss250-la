@@ -66,7 +66,7 @@ const LA_THEATERS = [
     searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
   },
   {
-    name: "Nuart Theatre",
+    name: "Landmark Nuart Theatre",
     neighborhood: "West LA",
     type: "arthouse",
     note: "Landmark Theatres' LA flagship",
@@ -75,7 +75,7 @@ const LA_THEATERS = [
     url: "https://www.landmarktheatres.com/los-angeles/nuart-theatre",
     scheduleUrl: "https://www.landmarktheatres.com/los-angeles/nuart-theatre",
     searchUrl: (title, date) =>
-      `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Nuart Theatre')}`,
+      `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Landmark Nuart Theatre')}`,
   },
   {
     name: "Vista Theatre",
@@ -88,18 +88,6 @@ const LA_THEATERS = [
     scheduleUrl: "https://www.vintagecinemas.com/vista/",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Vista Theatre Los Feliz')}`,
-  },
-  {
-    name: "The Landmark",
-    neighborhood: "West LA",
-    type: "arthouse",
-    note: "12-screen indie & specialty house",
-    opened: 1966,
-    history: "Originally opened in 1966 as a Laemmle Theatres house in the Westwood area. After renovation in 2019 it was rebranded under the Landmark banner with upgraded seating and a bar. The 12-screen complex on West Pico Boulevard is Landmark's Los Angeles flagship, specializing in independent, foreign, and specialty releases.",
-    url: "https://www.landmarktheatres.com/los-angeles/landmark",
-    scheduleUrl: "https://www.landmarktheatres.com/los-angeles/landmark",
-    searchUrl: (title, date) =>
-      `https://www.landmarktheatres.com/los-angeles/landmark`,
   },
   {
     name: "Alamo Drafthouse DTLA",

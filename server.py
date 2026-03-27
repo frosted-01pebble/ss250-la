@@ -854,7 +854,7 @@ def fetch_nuart_events():
         for d in days:
             times = session_times.get((mid_str, d), [])
             events.append({
-                'theater': 'Nuart Theatre',
+                'theater': 'Landmark Nuart Theatre',
                 'title':   title,
                 'date':    d,
                 'times':   times,
