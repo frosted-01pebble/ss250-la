@@ -112,10 +112,19 @@ function doubleFeaturePartner(rawTitle, ss) {
   return parts.filter(p => !titlesMatch(ss.title, p, '')).join(' / ');
 }
 
+// Returns true if the S&S film appears second in the raw double-feature title.
+function ssIsSecondFilm(rawTitle, ss) {
+  const sep = rawTitle.includes(' / ') ? ' / ' : rawTitle.includes('/') ? '/' : null;
+  if (!sep) return false;
+  const parts = rawTitle.split(sep).map(p => p.trim()).filter(Boolean);
+  return parts.length >= 2 && titlesMatch(ss.title, parts[parts.length - 1], '');
+}
+
 // Render the partner film portion of a double-feature title.
 // If the partner is also in S&S 250: italic + year inline, same weight as the primary.
 // If not: displayed on its own line in smaller muted text, with year if we have it.
-function partnerHtml(partner) {
+// ssSecond=true means the S&S film plays second, so the partner "preceded" it.
+function partnerHtml(partner, ssSecond) {
   if (!partner) return '';
   const partnerSS = findSSMatchByTitle(partner);
   if (partnerSS) {
@@ -124,7 +133,8 @@ function partnerHtml(partner) {
   const yearMatch = partner.match(/\((\d{4})\)/);
   const year = yearMatch ? ` (${yearMatch[1]})` : '';
   const cleanTitle = partner.replace(/\s*\(\d{4}\)/, '').trim();
-  return `<span class="screening-partner-line">on a double bill with ${escHtml(cleanTitle)}${escHtml(year)}</span>`;
+  const prefix = ssSecond ? 'preceded by' : 'followed by';
+  return `<span class="screening-partner-line">${prefix} ${escHtml(cleanTitle)}${escHtml(year)}</span>`;
 }
 
 // --- Helpers ---
@@ -338,7 +348,9 @@ function renderTheaterDetail() {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
       const rows = all.map(({ ev, ss }) => {
-        const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
+        const rawT = stripEntities(ev.title);
+        const partner = doubleFeaturePartner(rawT, ss);
+        const ssSecond = ssIsSecondFilm(rawT, ss);
         const sep = partner ? ' / ' : ', ';
         const times = (ev.times || []).join(sep);
         const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
@@ -350,7 +362,7 @@ function renderTheaterDetail() {
             <span class="screening-date">${escHtml(dateLabel)}</span>
             <span class="screening-rank">#${ss.rank}</span>
             <div class="screening-main">
-              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner)}</div>
+              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond)}</div>
               <div class="screening-meta">
                 <span class="screening-theater">${escHtml(ev.theater)}</span>
                 ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
@@ -389,7 +401,9 @@ function renderTheaterDetail() {
     detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
   } else {
     const rows = matches.map(({ ev, ss }) => {
-      const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
+      const rawT = stripEntities(ev.title);
+      const partner = doubleFeaturePartner(rawT, ss);
+      const ssSecond = ssIsSecondFilm(rawT, ss);
       const sep = partner ? ' / ' : ', ';
       const times = (ev.times || []).join(sep);
       const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
@@ -399,7 +413,7 @@ function renderTheaterDetail() {
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
           <div class="screening-main">
-            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner)}</div>
+            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond)}</div>
             <div class="screening-meta">
               ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
               ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
