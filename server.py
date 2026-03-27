@@ -1155,7 +1155,7 @@ def _load_ss250_from_js():
         return []
 
 def _tmdb_search(query, year=None):
-    """Search TMDB by title. Uses primary_release_year for accuracy."""
+    """Search TMDB by title. Returns full result dict or None."""
     params = {'api_key': TMDB_KEY, 'query': query, 'language': 'en-US'}
     if year:
         params['primary_release_year'] = year
@@ -1163,36 +1163,54 @@ def _tmdb_search(query, year=None):
         r = requests.get('https://api.themoviedb.org/3/search/movie',
                          params=params, headers=HEADERS, timeout=10)
         results = r.json().get('results', [])
-        # Prefer results whose year is within ±2 of target
         if year:
             for res in results:
                 ry = int((res.get('release_date') or '0000')[:4] or 0)
-                if abs(ry - year) <= 2 and res.get('poster_path'):
-                    return res['poster_path']
-            return None  # strict: don't return wrong-year result
-        if results and results[0].get('poster_path'):
-            return results[0]['poster_path']
+                if abs(ry - year) <= 2:
+                    return res
+            return None
+        if results:
+            return results[0]
     except Exception:
         pass
     return None
 
+def _fetch_imdb_id(tmdb_id):
+    """Fetch IMDb ID for a given TMDB movie ID."""
+    try:
+        r = requests.get(f'https://api.themoviedb.org/3/movie/{tmdb_id}/external_ids',
+                         params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
+        return r.json().get('imdb_id')
+    except Exception:
+        return None
+
 def _fetch_one_poster(film):
     title, year = film['title'], film['year']
+    result = None
     # 1. Exact year match
-    path = _tmdb_search(title, year)
-    # 2. Widen year by ±1 (catches off-by-one in TMDB data)
-    if not path:
-        path = _tmdb_search(title, year - 1) or _tmdb_search(title, year + 1)
+    result = _tmdb_search(title, year)
+    # 2. Widen year by ±1
+    if not result:
+        result = _tmdb_search(title, year - 1) or _tmdb_search(title, year + 1)
     # 3. Strip leading article and retry
-    if not path:
+    if not result:
         alt = re.sub(r'^(The|A|An|La|Le|Les|L\'|Un|Une|Des|Il|Lo|El)\s+', '', title, flags=re.I)
         if alt != title:
-            path = _tmdb_search(alt, year)
-    # 4. No year constraint (last resort — only if nothing else works)
-    if not path:
-        path = _tmdb_search(title)
+            result = _tmdb_search(alt, year)
+    # 4. No year constraint (last resort)
+    if not result:
+        result = _tmdb_search(title)
+
+    if not result:
+        return {**film, 'poster': None, 'overview': None, 'imdb_url': None}
+
+    path = result.get('poster_path')
     poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
-    return {**film, 'poster': poster}
+    overview = result.get('overview') or None
+    tmdb_id = result.get('id')
+    imdb_id = _fetch_imdb_id(tmdb_id) if tmdb_id else None
+    imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
+    return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
 
 def _build_ss250_cache():
     films = _load_ss250_from_js()

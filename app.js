@@ -224,12 +224,15 @@ function renderSS250Grid() {
 
   container.innerHTML = films.map(f => `
     <div class="ss250-card">
-      <div class="ss250-poster-wrap">
-        ${f.poster
-          ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
-          : `<div class="ss250-poster-placeholder">🎬</div>`}
-        <span class="ss250-rank">${rankLabel(f.rank)}</span>
-      </div>
+      <a class="ss250-poster-link" href="${escHtml(f.imdb_url || '#')}" target="_blank" rel="noopener">
+        <div class="ss250-poster-wrap">
+          ${f.poster
+            ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
+            : `<div class="ss250-poster-placeholder">🎬</div>`}
+          <span class="ss250-rank">${rankLabel(f.rank)}</span>
+          ${f.overview ? `<div class="ss250-overview">${escHtml(f.overview)}</div>` : ''}
+        </div>
+      </a>
       <div class="ss250-card-info">
         <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
         <div class="ss250-card-year">${f.year}</div>
