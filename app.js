@@ -198,7 +198,6 @@ function renderTheaterDetail() {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
       const rows = all.map(({ ev, ss }) => {
-        const cleanTitle = stripEntities(ev.title);
         const times = (ev.times || []).join(' · ');
         const fmt = ev.format || '';
         const dateLabel = formatScreeningDate(ev.date);
@@ -208,7 +207,7 @@ function renderTheaterDetail() {
           <a class="screening-row all-view" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
             <span class="screening-date">${escHtml(dateLabel)}</span>
             <span class="screening-rank">#${ss.rank}</span>
-            <span class="screening-title">${escHtml(cleanTitle)}</span>
+            <span class="screening-title"><em>${escHtml(ss.title)}</em></span>
             <span class="screening-theater">${escHtml(ev.theater)}</span>
             <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
           </a>`;
@@ -242,7 +241,6 @@ function renderTheaterDetail() {
     detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
   } else {
     const rows = matches.map(({ ev, ss }) => {
-      const cleanTitle = stripEntities(ev.title);
       const times = (ev.times || []).join(' · ');
       const fmt = ev.format || '';
       const dateLabel = formatScreeningDate(ev.date);
@@ -250,7 +248,7 @@ function renderTheaterDetail() {
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
-          <span class="screening-title">${escHtml(cleanTitle)}</span>
+          <span class="screening-title"><em>${escHtml(ss.title)}</em></span>
           <span class="screening-time">${fmt ? escHtml(fmt) + (times ? ' · ' + escHtml(times) : '') : escHtml(times)}</span>
         </a>`;
     }).join('');

@@ -47,12 +47,11 @@ const LA_THEATERS = [
   {
     name: "Los Feliz 3",
     neighborhood: "Los Feliz",
-    type: "arthouse",
-    note: "",
-    url: "https://www.laemmle.com/theatre/los-feliz-3",
-    scheduleUrl: "https://www.laemmle.com/theatre/los-feliz-3",
-    searchUrl: (title, date) =>
-      `https://www.laemmle.com/search?query=${encodeURIComponent(title)}`,
+    type: "repertory",
+    note: "American Cinematheque — classic & foreign film",
+    url: "https://www.americancinematheque.com/los-feliz-theatre/",
+    scheduleUrl: "https://www.americancinematheque.com/calendar/",
+    searchUrl: (title, date) => `https://www.americancinematheque.com/calendar/`,
   },
   {
     name: "Nuart Theatre",
