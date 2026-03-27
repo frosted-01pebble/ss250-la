@@ -512,19 +512,48 @@ def fetch_braindead_events():
 
     return unique
 
+def _nuart_movie_paths():
+    """Fetch the static allMovie query to get id->path mapping."""
+    # Determine today's build date from the homepage JS src
+    try:
+        r0 = requests.get('https://www.landmarktheatres.com/', headers=HEADERS, timeout=10)
+        m = re.search(r'webediamovies\.pro/prod/landmarktheatres/(\d{4}-\d{2}-\d{2})/', r0.text)
+        build = m.group(1) if m else date.today().strftime('%Y-%m-%d')
+    except Exception:
+        build = date.today().strftime('%Y-%m-%d')
+
+    paths = {}
+    try:
+        r = requests.get(
+            f'https://cms-assets.webediamovies.pro/prod/landmarktheatres/{build}/public/page-data/sq/d/3360083659.json',
+            headers=HEADERS, timeout=15
+        )
+        if r.status_code == 200:
+            for m in r.json()['data']['allMovie']['nodes']:
+                if m.get('path'):
+                    paths[m['id']] = m['path']
+    except Exception:
+        pass
+    return paths
+
+
 def fetch_nuart_events():
     """Landmark Nuart Theatre — Gatsby boxofficeapi (scheduledMovies + movies endpoints)."""
     today_str = date.today().strftime('%Y-%m-%d')
 
-    # Step 1: get movie IDs and their scheduled dates
-    r = requests.get(
-        'https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi/scheduledMovies',
-        params={'theaterId': 'X00CW'}, headers=HEADERS, timeout=20
-    )
+    # Step 1: get movie IDs and their scheduled dates + id->path map (parallel)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_sched = ex.submit(requests.get,
+            'https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi/scheduledMovies',
+            **{'params': {'theaterId': 'X00CW'}, 'headers': HEADERS, 'timeout': 20})
+        f_paths = ex.submit(_nuart_movie_paths)
+        r = f_sched.result()
+        path_map = f_paths.result()
+
     if r.status_code != 200:
         return []
     sched_data = r.json() or {}
-    scheduled_days = sched_data.get('scheduledDays') or {}  # {movieId: [dates]}
+    scheduled_days = sched_data.get('scheduledDays') or {}
 
     # Filter to upcoming dates only
     upcoming = {mid: [d for d in days if d >= today_str]
@@ -556,8 +585,9 @@ def fetch_nuart_events():
         poster_url = poster.get('url') if isinstance(poster, dict) else None
         if not poster_url:
             poster_url = m.get('poster')
-        path = m.get('path') or ''
-        url = f'https://www.landmarktheatres.com{path}' if path else 'https://www.landmarktheatres.com/theaters/x00cw-landmark-nuart-theatre-west-los-angeles'
+        path = path_map.get(mid) or ''
+        url = (f'https://www.landmarktheatres.com{path}?theater=X00CW' if path
+               else 'https://www.landmarktheatres.com/theaters/x00cw-landmark-nuart-theatre-west-los-angeles')
 
         for d in days:
             events.append({
