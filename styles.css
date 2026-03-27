@@ -71,6 +71,9 @@ header h1 span { color: var(--accent); font-style: italic; }
   color: #000;
   font-weight: bold;
 }
+.film-btn { border-radius: 4px; }
+.film-btn:hover { color: #39ff14; border-color: #39ff14; }
+.film-btn.film-active { background: #39ff14; border-color: #39ff14; color: #000; font-weight: bold; }
 .nav-loading {
   font-size: 0.82rem;
   color: var(--muted);
@@ -220,6 +223,7 @@ header h1 span { color: var(--accent); font-style: italic; }
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+  padding-left: 0.4rem;
 }
 .screening-title {
   font-size: 0.9rem;
@@ -509,6 +513,11 @@ footer {
   text-align: center; padding: 2rem 1rem;
   color: var(--muted); font-size: 0.78rem; font-family: sans-serif;
   border-top: 1px solid var(--border); margin-top: 3rem;
+}
+.footer-sampler {
+  font-size: 0.65rem;
+  color: #555;
+  margin-top: 0.4rem;
 }
 
 /* ── Responsive ── */

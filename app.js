@@ -256,11 +256,12 @@ function renderTheaterNav() {
     return;
   }
 
-  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
+  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' && selectedTheater !== '__film__' ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   nav.innerHTML = `
     <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
+    <button class="theater-btn film-btn${selectedTheater === '__film__' ? ' film-active' : ''}" id="film-btn">ON FILM</button>
     <div class="theater-dropdown-wrap">
       <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
         ${dropdownLabel} ▾
@@ -277,6 +278,13 @@ function renderTheaterNav() {
   const allBtn = nav.querySelector('[data-theater="__all__"]');
   allBtn.addEventListener('click', () => {
     selectedTheater = '__all__';
+    closeDropdown();
+    renderTheaterNav();
+    renderTheaterDetail();
+  });
+
+  nav.querySelector('#film-btn').addEventListener('click', () => {
+    selectedTheater = '__film__';
     closeDropdown();
     renderTheaterNav();
     renderTheaterDetail();
@@ -452,6 +460,44 @@ function renderTheaterDetail() {
     return;
   }
 
+  // "On Film" view
+  if (selectedTheater === '__film__') {
+    const today = todayStr();
+    const _FILM_RE = /\b(16mm|35mm|70mm)\b/i;
+    const all = scraperEvents
+      .filter(e => e.date >= today && _FILM_RE.test(e.format || ''))
+      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+      .filter(({ ss }) => ss !== null)
+      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank);
+
+    const header = `
+      <div class="detail-header">
+        <div class="detail-header-left">
+          <div class="detail-theater-name">On Film</div>
+          <div class="detail-meta">Upcoming Sight &amp; Sound screenings on 16mm, 35mm, or 70mm</div>
+        </div>
+      </div>`;
+
+    if (all.length === 0) {
+      detail.innerHTML = header + `<p class="detail-empty">No upcoming film screenings found.</p>`;
+    } else {
+      const rows = buildScreeningRowsList(all, true);
+      const LIMIT = 12;
+      let listHtml;
+      if (rows.length <= LIMIT) {
+        listHtml = rows.join('');
+      } else {
+        const moreCount = rows.length - LIMIT;
+        listHtml = rows.slice(0, LIMIT).join('')
+          + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
+          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all — ${moreCount} more</button>`;
+      }
+      detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
+    }
+    detail.classList.remove('hidden');
+    return;
+  }
+
   // "All Upcoming" view
   if (selectedTheater === '__all__') {
     const today = todayStr();
@@ -473,7 +519,7 @@ function renderTheaterDetail() {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
       const rows = buildScreeningRowsList(all, true);
-      const LIMIT = 20;
+      const LIMIT = 12;
       let listHtml;
       if (rows.length <= LIMIT) {
         listHtml = rows.join('');
@@ -481,7 +527,7 @@ function renderTheaterDetail() {
         const moreCount = rows.length - LIMIT;
         listHtml = rows.slice(0, LIMIT).join('')
           + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
-          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all ${moreCount} more</button>`;
+          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all — ${moreCount} more</button>`;
       }
       detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
     }
