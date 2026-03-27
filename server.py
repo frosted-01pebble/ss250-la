@@ -265,62 +265,78 @@ def fetch_newbev_events():
 
 
 _VISTA_FORMAT_RE = re.compile(
-    r'\s+(70mm|35mm|16mm|4K\s*DCP|2K\s*DCP|DCP|Blu-?ray|digital)$',
+    r'\b(70mm|35mm|16mm|4K\s*DCP|2K\s*DCP|DCP|Blu-?ray|digital)\b',
     re.IGNORECASE
 )
+_VISTA_BASE = 'https://ticketing.uswest.veezi.com'
 
 def fetch_vista_events():
-    """Vista Theatre — Veezi JSON-LD structured data embedded in sessions page.
+    """Vista Theatre — Veezi HTML sessions page.
 
-    Format is appended to the event name (e.g. 'Rio Bravo 70mm').
-    If no format is listed, default to 35mm per Vista's standard.
+    Format is either a suffix in the title ('Project Hail Mary 70mm')
+    or found in the subtitle paragraph ('Video Archives 16mm Screening').
+    Defaults to 35mm when not listed.
+    '/' in title = double feature; kept as-is in the title string.
     Groups multiple showtimes for the same film+date into one event.
     """
-    url = 'https://ticketing.uswest.veezi.com/sessions/?siteToken=20xhpa3yt2hhkwt4zjvfcwsaww'
+    url = f'{_VISTA_BASE}/sessions/?siteToken=20xhpa3yt2hhkwt4zjvfcwsaww'
     r = requests.get(url, headers=HEADERS, timeout=20)
     soup = BeautifulSoup(r.text, 'html.parser')
 
-    # Collect sessions grouped by (title, date) -> {times, format, url}
-    groups = {}
+    groups = {}  # (title, date_str) -> event dict
 
-    for script in soup.find_all('script', type='application/ld+json'):
-        try:
-            data = json.loads(script.string or '')
-        except Exception:
+    for date_div in soup.select('div#sessionsByDateConent div.date'):
+        date_h3 = date_div.select_one('h3.date-title')
+        if not date_h3:
             continue
-        if not isinstance(data, list):
-            continue
-        for item in data:
-            if item.get('@type') != 'VisualArtsEvent':
-                continue
-            raw_name = item.get('name') or ''
+        # Parse "Friday 27, March" → "March 27" → YYYY-MM-DD
+        raw_date = date_h3.get_text(strip=True)
+        m = re.match(r'\w+\s+(\d+),\s+(\w+)', raw_date)
+        date_str = parse_date_str(f"{m.group(2)} {m.group(1)}") if m else None
 
-            # Extract format from name suffix; default to 35mm
-            fmt_match = _VISTA_FORMAT_RE.search(raw_name)
-            fmt   = fmt_match.group(1).strip() if fmt_match else '35mm'
-            title = _VISTA_FORMAT_RE.sub('', raw_name).strip()
+        for film_div in date_div.select('div.film'):
+            title_el = film_div.select_one('h3.title')
+            raw_title = title_el.get_text(strip=True) if title_el else ''
 
-            start = item.get('startDate') or ''
-            dt = None
-            if start:
-                try:
-                    dt = datetime.fromisoformat(start)
-                except Exception:
-                    pass
+            # Subtitle paragraph (after removing the censor span)
+            p_el = film_div.select_one('h3.title + p')
+            sub = ''
+            if p_el:
+                censor = p_el.select_one('.censor')
+                if censor:
+                    censor.extract()
+                sub = p_el.get_text(strip=True)
 
-            date_str = dt.strftime('%Y-%m-%d') if dt else None
-            h = dt.hour % 12 or 12
-            ampm = 'AM' if dt.hour < 12 else 'PM'
-            time_str = f"{h}:{dt.strftime('%M')} {ampm}" if dt else ''
+            # Extract format: title suffix first, then subtitle, default 35mm
+            fmt_m = _VISTA_FORMAT_RE.search(raw_title)
+            if fmt_m:
+                fmt = fmt_m.group(1).strip()
+                # Strip format suffix from title (but preserve '/' double-feature slash)
+                title = raw_title[:fmt_m.start()].strip()
+            else:
+                fmt_m2 = _VISTA_FORMAT_RE.search(sub)
+                fmt = fmt_m2.group(1).strip() if fmt_m2 else '35mm'
+                title = raw_title
 
-            key = (title, date_str)
-            if key not in groups:
-                groups[key] = {
-                    'title': title, 'date': date_str, 'fmt': fmt,
-                    'times': [], 'url': item.get('url') or '',
-                }
-            if time_str and time_str not in groups[key]['times']:
-                groups[key]['times'].append(time_str)
+            # Poster (relative URL → absolute)
+            img = film_div.select_one('img.poster')
+            poster = (_VISTA_BASE + img['src']) if img and img.get('src') else None
+
+            # Session times and URLs for this date
+            for li in film_div.select('ul.session-times li'):
+                time_el = li.select_one('time')
+                link_el = li.select_one('a[href]')
+                time_str = time_el.get_text(strip=True) if time_el else ''
+                sess_url = link_el['href'] if link_el else url
+
+                key = (title, date_str)
+                if key not in groups:
+                    groups[key] = {
+                        'title': title, 'date': date_str, 'fmt': fmt,
+                        'times': [], 'url': sess_url, 'poster': poster,
+                    }
+                if time_str and time_str not in groups[key]['times']:
+                    groups[key]['times'].append(time_str)
 
     return [
         {
@@ -330,7 +346,7 @@ def fetch_vista_events():
             'times':   g['times'],
             'format':  g['fmt'],
             'url':     g['url'],
-            'poster':  None,
+            'poster':  g['poster'],
             'source':  'vista',
         }
         for g in groups.values()
