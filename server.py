@@ -264,12 +264,24 @@ def fetch_newbev_events():
     return events
 
 
+_VISTA_FORMAT_RE = re.compile(
+    r'\s+(70mm|35mm|16mm|4K\s*DCP|2K\s*DCP|DCP|Blu-?ray|digital)$',
+    re.IGNORECASE
+)
+
 def fetch_vista_events():
-    """Vista Theatre — Veezi JSON-LD structured data embedded in sessions page."""
+    """Vista Theatre — Veezi JSON-LD structured data embedded in sessions page.
+
+    Format is appended to the event name (e.g. 'Rio Bravo 70mm').
+    If no format is listed, default to 35mm per Vista's standard.
+    Groups multiple showtimes for the same film+date into one event.
+    """
     url = 'https://ticketing.uswest.veezi.com/sessions/?siteToken=20xhpa3yt2hhkwt4zjvfcwsaww'
     r = requests.get(url, headers=HEADERS, timeout=20)
     soup = BeautifulSoup(r.text, 'html.parser')
-    events = []
+
+    # Collect sessions grouped by (title, date) -> {times, format, url}
+    groups = {}
 
     for script in soup.find_all('script', type='application/ld+json'):
         try:
@@ -281,6 +293,13 @@ def fetch_vista_events():
         for item in data:
             if item.get('@type') != 'VisualArtsEvent':
                 continue
+            raw_name = item.get('name') or ''
+
+            # Extract format from name suffix; default to 35mm
+            fmt_match = _VISTA_FORMAT_RE.search(raw_name)
+            fmt   = fmt_match.group(1).strip() if fmt_match else '35mm'
+            title = _VISTA_FORMAT_RE.sub('', raw_name).strip()
+
             start = item.get('startDate') or ''
             dt = None
             if start:
@@ -288,17 +307,34 @@ def fetch_vista_events():
                     dt = datetime.fromisoformat(start)
                 except Exception:
                     pass
-            events.append({
-                'theater': 'Vista Theatre',
-                'title':   item.get('name') or '',
-                'date':    dt.strftime('%Y-%m-%d') if dt else None,
-                'times':   [dt.strftime('%-I:%M %p') if dt else ''],
-                'url':     item.get('url') or '',
-                'poster':  None,
-                'source':  'vista',
-            })
 
-    return events
+            date_str = dt.strftime('%Y-%m-%d') if dt else None
+            h = dt.hour % 12 or 12
+            ampm = 'AM' if dt.hour < 12 else 'PM'
+            time_str = f"{h}:{dt.strftime('%M')} {ampm}" if dt else ''
+
+            key = (title, date_str)
+            if key not in groups:
+                groups[key] = {
+                    'title': title, 'date': date_str, 'fmt': fmt,
+                    'times': [], 'url': item.get('url') or '',
+                }
+            if time_str and time_str not in groups[key]['times']:
+                groups[key]['times'].append(time_str)
+
+    return [
+        {
+            'theater': 'Vista Theatre',
+            'title':   g['title'],
+            'date':    g['date'],
+            'times':   g['times'],
+            'format':  g['fmt'],
+            'url':     g['url'],
+            'poster':  None,
+            'source':  'vista',
+        }
+        for g in groups.values()
+    ]
 
 
 def _extract_rich_text(node):
