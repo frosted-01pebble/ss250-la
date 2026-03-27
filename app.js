@@ -467,8 +467,11 @@ function renderTheaterDetail() {
       .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank);
 
     const metaText = filmFilterActive
-      ? 'Upcoming screenings on 16mm, 35mm &amp; 70mm'
+      ? 'Every Sight &amp; Sound screening across LA playing on either 16mm, 35mm, or 70mm'
       : 'Every Sight &amp; Sound screening across all LA venues';
+    const emptyText = filmFilterActive
+      ? 'No upcoming film screenings found.'
+      : 'No upcoming Sight &amp; Sound screenings found.';
     const header = `
       <div class="detail-header">
         <div class="detail-header-left">
@@ -481,7 +484,7 @@ function renderTheaterDetail() {
       </div>`;
 
     if (all.length === 0) {
-      detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
+      detail.innerHTML = header + `<p class="detail-empty">${emptyText}</p>`;
     } else {
       const rows = buildScreeningRowsList(all, true);
       const LIMIT = 12;
@@ -492,7 +495,11 @@ function renderTheaterDetail() {
         const moreCount = rows.length - LIMIT;
         listHtml = rows.slice(0, LIMIT).join('')
           + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
-          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all — ${moreCount} more</button>`;
+          + `<button class="show-more-btn" id="show-more-btn" onclick="
+              var m=document.getElementById('all-screenings-more');
+              var hidden=m.classList.toggle('hidden');
+              this.textContent=hidden?'Show all \u2014 ${moreCount} more':'Show less';
+            ">Show all \u2014 ${moreCount} more</button>`;
       }
       detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
     }
