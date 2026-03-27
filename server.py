@@ -21,6 +21,53 @@ CORS(app)
 _cache = {'data': None, 'fetched_at': 0}
 CACHE_TTL = 3600  # refresh every hour
 
+_year_cache = {}  # title -> year int or None
+
+def _lookup_year(title):
+    """Search TMDB for a film title and return its release year, or None."""
+    key = title.lower().strip()
+    if key in _year_cache:
+        return _year_cache[key]
+    params = {'api_key': TMDB_KEY, 'query': title, 'language': 'en-US'}
+    try:
+        r = requests.get('https://api.themoviedb.org/3/search/movie',
+                         params=params, headers=HEADERS, timeout=8)
+        results = r.json().get('results', [])
+        if results:
+            year_str = (results[0].get('release_date') or '')[:4]
+            year = int(year_str) if year_str.isdigit() else None
+            _year_cache[key] = year
+            return year
+    except Exception:
+        pass
+    _year_cache[key] = None
+    return None
+
+_DOUBLE_SEP = re.compile(r' / |/')
+
+def _enrich_double_features(events):
+    """For double-feature titles, embed TMDB release year into each part that lacks one."""
+    for ev in events:
+        title = ev.get('title', '')
+        if '/' not in title:
+            continue
+        sep = ' / ' if ' / ' in title else '/'
+        parts = [p.strip() for p in title.split(sep)]
+        enriched = []
+        changed = False
+        for part in parts:
+            if re.search(r'\(\d{4}\)', part):
+                enriched.append(part)
+            else:
+                year = _lookup_year(part)
+                if year:
+                    enriched.append(f'{part} ({year})')
+                    changed = True
+                else:
+                    enriched.append(part)
+        if changed:
+            ev['title'] = f' / '.join(enriched)
+
 def _build_cache():
     results = {'events': [], 'errors': {}}
     for key, fetcher in [
@@ -36,6 +83,7 @@ def _build_cache():
         except Exception as e:
             results['errors'][key] = str(e)
             traceback.print_exc()
+    _enrich_double_features(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
     print(f"Cache refreshed — {len(results['events'])} events, errors: {list(results['errors'].keys()) or 'none'}")
