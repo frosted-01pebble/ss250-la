@@ -83,7 +83,8 @@ function findSSMatchByTitle(rawTitle) {
   variants.add(rawTitle.replace(/\s*\([^)]+\)/g, '').trim());
   const noSuffix = rawTitle.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim();
   variants.add(noSuffix.replace(/\s*\([^)]+\)/g, '').trim());
-  for (const sep of [' with ', ' + ', ' / ', ' & ']) {
+  // Split double features: ' / ' (AC), '/' (Vista), ' with ', ' + ', ' & '
+  for (const sep of [' with ', ' + ', ' / ', ' & ', '/']) {
     if (rawTitle.includes(sep)) {
       for (const part of rawTitle.split(sep)) {
         variants.add(part.trim());
@@ -99,6 +100,17 @@ function findSSMatchByTitle(rawTitle) {
     }
   }
   return null;
+}
+
+// For a double-feature event, return the partner film title (the non-SS match).
+// Returns empty string if not a double feature or no distinct partner.
+function doubleFeaturePartner(rawTitle, ss) {
+  const sep = rawTitle.includes(' / ') ? ' / ' : rawTitle.includes('/') ? '/' : null;
+  if (!sep) return '';
+  const parts = rawTitle.split(sep).map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return '';
+  // Return the part(s) that are NOT the matched SS film
+  return parts.filter(p => !titlesMatch(ss.title, p, '')).join(' / ');
 }
 
 // --- Helpers ---
@@ -317,12 +329,13 @@ function renderTheaterDetail() {
         const dateLabel = formatScreeningDate(ev.date);
         const theater = LA_THEATERS.find(t => t.name === ev.theater);
         const scheduleUrl = theater ? theater.scheduleUrl : '#';
+        const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
         return `
           <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
             <span class="screening-date">${escHtml(dateLabel)}</span>
             <span class="screening-rank">#${ss.rank}</span>
             <div class="screening-main">
-              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span></div>
+              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partner ? ` <span class="screening-partner">/ ${escHtml(partner)}</span>` : ''}</div>
               <div class="screening-meta">
                 <span class="screening-theater">${escHtml(ev.theater)}</span>
                 ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
@@ -364,12 +377,13 @@ function renderTheaterDetail() {
       const times = (ev.times || []).join(', ');
       const fmt = ev.format || '';
       const dateLabel = formatScreeningDate(ev.date);
+      const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
       return `
         <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(dateLabel)}</span>
           <span class="screening-rank">#${ss.rank}</span>
           <div class="screening-main">
-            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span></div>
+            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partner ? ` <span class="screening-partner">/ ${escHtml(partner)}</span>` : ''}</div>
             <div class="screening-meta">
               ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
               ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}

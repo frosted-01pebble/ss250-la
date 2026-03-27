@@ -231,6 +231,12 @@ header h1 span { color: var(--accent); font-style: italic; }
   font-family: sans-serif;
   font-style: normal;
 }
+.screening-partner {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-family: sans-serif;
+  font-style: normal;
+}
 .screening-meta {
   display: flex;
   flex-direction: row;
