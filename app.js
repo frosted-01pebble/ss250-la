@@ -113,15 +113,18 @@ function doubleFeaturePartner(rawTitle, ss) {
 }
 
 // Render the partner film portion of a double-feature title.
-// If the partner is also in S&S 250: italic + year, same visual weight as the primary.
-// If not: smaller muted text.
+// If the partner is also in S&S 250: italic + year inline, same weight as the primary.
+// If not: displayed on its own line in smaller muted text, with year if we have it.
 function partnerHtml(partner) {
   if (!partner) return '';
   const partnerSS = findSSMatchByTitle(partner);
   if (partnerSS) {
     return ` / <em>${escHtml(partnerSS.title)}</em> <span class="screening-year">(${partnerSS.year})</span>`;
   }
-  return ` <span class="screening-partner">/ ${escHtml(partner)}</span>`;
+  const yearMatch = partner.match(/\((\d{4})\)/);
+  const year = yearMatch ? ` (${yearMatch[1]})` : '';
+  const cleanTitle = partner.replace(/\s*\(\d{4}\)/, '').trim();
+  return `<span class="screening-partner-line">${escHtml(cleanTitle)}${escHtml(year)}</span>`;
 }
 
 // --- Helpers ---
