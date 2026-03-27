@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git clone:*)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36\" \"https://www.thenewbev.com/\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(json.dumps\\({k:e.get\\(k\\) for k in [''''id'''',''''title'''',''''start_date'''',''''end_date'''',''''url'''',''''venue'''']}, indent=2\\)\\) for e in d.get\\(''''events'''',d.get\\(''''results'''',[]\\)\\)[:3]]\")",
+      "Bash(curl -sI \"https://www.vintagecinemas.com/vista/\" -A \"Mozilla/5.0\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml\" \"https://www.thenewbev.com/\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: application/json\" \"https://www.americancinematheque.com/wp-json/tribe/events/v1/events?per_page=20\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html\" -L \"https://www.vintagecinemas.com/vista/\")",
+      "Bash(curl -sv \"https://api.veezi.com/v1/session?siteToken=20xhpa3yt2hhkwt4zjvfcwsaww\" -H \"Accept: application/json\")",
+      "Bash(curl -s -A \"Mozilla/5.0\" \"https://www.americancinematheque.com/?post_type=tribe_events&ical=1&eventDisplay=list\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -A \"Mozilla/5.0\" \"https://www.thenewbev.com/wp-json/\" echo \"\" curl -s -A \"Mozilla/5.0\" \"https://www.thenewbev.com/?post_type=tribe_events&ical=1&eventDisplay=list\")",
+      "Bash(pip3 install:*)",
+      "Bash(timeout 30 python3 -c \":*)",
+      "Bash(python3 -c \":*)",
+      "Bash(curl -s http://localhost:5001/api/showtimes)",
+      "Bash(pkill -f \"python3 server.py\")",
+      "Bash(xargs kill:*)",
+      "Bash(node --check /Users/samgallen/SS/app.js)",
+      "Bash(curl -sI -A \"Mozilla/5.0\" \"https://www.academymuseum.org/en/programs\")",
+      "WebFetch(domain:www.google.com)",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/122.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml\" -H \"Accept-Encoding: gzip, deflate, br\" --compressed -L \"https://www.brain-dead.com/pages/studios\")",
+      "Bash(curl -s -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/122.0.0.0 Safari/537.36\" --compressed -H \"Accept: text/html\" \"https://shop.brain-dead.com/blogs/screenings\")",
+      "WebSearch",
+      "WebFetch(domain:studios.wearebraindead.com)",
+      "WebFetch(domain:www.academymuseum.org)",
+      "Bash(curl -s \"https://studios.wearebraindead.com/2026-03-29\" -H \"User-Agent: Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/122.0.0.0 Safari/537.36\")",
+      "Bash(curl -s \"https://studios.wearebraindead.com\" -H \"User-Agent: Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/122.0.0.0 Safari/537.36\")",
+      "Bash(curl -s \"https://www.academymuseum.org/en/calendar\" -H \"User-Agent: Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/122.0.0.0 Safari/537.36\")",
+      "Bash(python3 -c \"from server import fetch_ac_events; evs = fetch_ac_events\\(\\); theaters = set\\(e[''theater''] for e in evs\\); print\\(theaters\\)\")",
+      "Bash(git --version)"
+    ]
+  }
+}
