@@ -301,6 +301,23 @@ header h1 span { color: var(--accent); font-style: italic; }
   font-family: sans-serif;
   white-space: nowrap;
 }
+.show-more-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-family: sans-serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  text-align: center;
+}
+.show-more-btn:hover {
+  background: #1e1a0a;
+}
 
 /* ── API setup ── */
 .api-setup {

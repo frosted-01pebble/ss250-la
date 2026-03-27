@@ -412,8 +412,8 @@ function buildGroupRow(group, includeTheater) {
     </div>`;
 }
 
-function buildScreeningRows(matches, includeTheater) {
-  // Group by (ss.rank, theater) to collapse multi-day runs
+function buildScreeningRowsList(matches, includeTheater) {
+  // Returns array of rendered HTML strings, one per unique (title, theater) group
   const groupMap = new Map();
   for (const m of matches) {
     const key = `${m.ss.title}__${m.ev.theater}`;
@@ -421,15 +421,21 @@ function buildScreeningRows(matches, includeTheater) {
     groupMap.get(key).push(m);
   }
   const rendered = new Set();
-  return matches.map(m => {
+  const rows = [];
+  for (const m of matches) {
     const key = `${m.ss.title}__${m.ev.theater}`;
-    if (rendered.has(key)) return '';
+    if (rendered.has(key)) continue;
     rendered.add(key);
     const group = groupMap.get(key);
-    return group.length === 1
+    rows.push(group.length === 1
       ? buildSingleRow(m.ev, m.ss, includeTheater)
-      : buildGroupRow(group, includeTheater);
-  }).join('');
+      : buildGroupRow(group, includeTheater));
+  }
+  return rows;
+}
+
+function buildScreeningRows(matches, includeTheater) {
+  return buildScreeningRowsList(matches, includeTheater).join('');
 }
 
 // --- Theater detail ---
@@ -466,7 +472,18 @@ function renderTheaterDetail() {
     if (all.length === 0) {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
-      detail.innerHTML = header + `<div class="screening-list">${buildScreeningRows(all, true)}</div>`;
+      const rows = buildScreeningRowsList(all, true);
+      const LIMIT = 20;
+      let listHtml;
+      if (rows.length <= LIMIT) {
+        listHtml = rows.join('');
+      } else {
+        const moreCount = rows.length - LIMIT;
+        listHtml = rows.slice(0, LIMIT).join('')
+          + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
+          + `<button class="show-more-btn" onclick="document.getElementById('all-screenings-more').classList.remove('hidden');this.remove()">Show all ${moreCount} more</button>`;
+      }
+      detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
     }
     detail.classList.remove('hidden');
     return;
