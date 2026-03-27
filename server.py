@@ -10,7 +10,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-import json, re, traceback, threading, time, os
+import json, re, traceback, threading, time, os, html as html_lib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 
@@ -165,6 +165,37 @@ _FORMAT_RE = re.compile(
     re.IGNORECASE
 )
 
+_BODY_YEAR_RE = re.compile(r'([A-Z\u2019\u2018\u201C\u201D][^\n,]{2,100}?),\s*(\d{4}),\s*Dir\.', re.MULTILINE)
+
+def _extract_body_film_years(body_html):
+    """Parse 'FILM TITLE, YEAR, Dir.' patterns from AC body HTML. Returns {UPPER_TITLE: year}."""
+    if not body_html:
+        return {}
+    plain = re.sub(r'<[^>]+>', ' ', body_html)
+    plain = html_lib.unescape(plain)
+    years = {}
+    for m in _BODY_YEAR_RE.finditer(plain):
+        raw_title = m.group(1).strip()
+        year = int(m.group(2))
+        years[raw_title.upper()] = year
+    return years
+
+def _enrich_title_with_body_years(title, body_years):
+    """For double-feature titles, append (YEAR) to each part found in body_years."""
+    if not body_years or '/' not in title:
+        return title
+    sep = ' / ' if ' / ' in title else '/'
+    parts = [p.strip() for p in title.split(sep)]
+    new_parts = []
+    for part in parts:
+        clean = re.sub(r'\s*\(\d{4}\)', '', part).strip()
+        year = body_years.get(clean.upper())
+        if year and not re.search(r'\(\d{4}\)', part):
+            new_parts.append(f'{clean} ({year})')
+        else:
+            new_parts.append(part)
+    return ' / '.join(new_parts)
+
 def _extract_ac_format(intro_text, body_text=''):
     """Pull a film format string from AC intro_text or main_body_text HTML."""
     # Prefer explicit "FORMAT: ..." label in body
@@ -229,6 +260,11 @@ def fetch_ac_venue(theater_name, location_term_id):
             main_sec = acf.get('event_main_section') or {}
             body     = main_sec.get('main_body_text') or '' if isinstance(main_sec, dict) else ''
             fmt      = _extract_ac_format(intro, body)
+
+            # For double features, embed release years from body description
+            if '/' in title:
+                body_years = _extract_body_film_years(body)
+                title = _enrich_title_with_body_years(title, body_years)
 
             # Dates — may be range; only keep future events
             date_raw = hero.get('dates') or '' if isinstance(hero, dict) else ''

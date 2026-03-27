@@ -109,7 +109,9 @@ function doubleFeaturePartner(rawTitle, ss) {
   if (!sep) return '';
   const parts = rawTitle.split(sep).map(p => p.trim()).filter(Boolean);
   if (parts.length < 2) return '';
-  return parts.filter(p => !titlesMatch(ss.title, p, '')).join(' / ');
+  // Strip year suffix before matching so "(1972)" doesn't break comparison
+  const bare = p => p.replace(/\s*\(\d{4}\)\s*$/, '').trim();
+  return parts.filter(p => !titlesMatch(ss.title, bare(p), '')).join(' / ');
 }
 
 // Returns true if the S&S film appears second in the raw double-feature title.
@@ -117,7 +119,8 @@ function ssIsSecondFilm(rawTitle, ss) {
   const sep = rawTitle.includes(' / ') ? ' / ' : rawTitle.includes('/') ? '/' : null;
   if (!sep) return false;
   const parts = rawTitle.split(sep).map(p => p.trim()).filter(Boolean);
-  return parts.length >= 2 && titlesMatch(ss.title, parts[parts.length - 1], '');
+  const bare = p => p.replace(/\s*\(\d{4}\)\s*$/, '').trim();
+  return parts.length >= 2 && titlesMatch(ss.title, bare(parts[parts.length - 1]), '');
 }
 
 // Render the partner film portion of a double-feature title.
