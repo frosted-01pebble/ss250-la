@@ -4,6 +4,7 @@ const SCRAPER_URL = '/api/showtimes';
 let scraperEvents = [];
 let scraperLoaded = false;
 let selectedTheater = null;
+let _groupIdCounter = 0;
 
 // --- Title normalization ---
 function normalizeTitle(t) {
@@ -315,6 +316,122 @@ function closeDropdown() {
 
 document.addEventListener('click', closeDropdown);
 
+// --- Multi-day run helpers ---
+function dateRangeLabel(dates) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (dates.length === 1) return formatScreeningDate(dates[0]);
+  const [, fm, fd] = dates[0].split('-').map(Number);
+  const [, lm, ld] = dates[dates.length - 1].split('-').map(Number);
+  if (fm === lm) return `${months[fm-1]} ${fd}–${ld}`;
+  return `${months[fm-1]} ${fd} – ${months[lm-1]} ${ld}`;
+}
+
+function toggleGroup(id) {
+  const children = document.getElementById(`group-children-${id}`);
+  const arrow = document.getElementById(`group-arrow-${id}`);
+  if (!children) return;
+  const isHidden = children.classList.toggle('hidden');
+  if (arrow) arrow.textContent = (isHidden ? '▶' : '▼') + ' ' + arrow.dataset.count;
+}
+
+function buildSingleRow(ev, ss, includeTheater) {
+  const rawT = stripEntities(ev.title);
+  const partner = doubleFeaturePartner(rawT, ss);
+  const ssSecond = ssIsSecondFilm(rawT, ss);
+  const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+  const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+  const sep = (partner && !partnerSS) ? ' / ' : ', ';
+  const times = (ev.times || []).join(sep);
+  const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
+  const dateLabel = formatScreeningDate(ev.date);
+  const theater = LA_THEATERS.find(t => t.name === ev.theater);
+  const scheduleUrl = theater ? theater.scheduleUrl : '#';
+  return `
+    <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
+      <span class="screening-date">${escHtml(dateLabel)}</span>
+      <span class="screening-rank">${escHtml(rankStr)}</span>
+      <div class="screening-main">
+        <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
+        <div class="screening-meta">
+          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+          ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+        </div>
+      </div>
+    </a>`;
+}
+
+function buildGroupRow(group, includeTheater) {
+  const id = _groupIdCounter++;
+  const dates = group.map(m => m.ev.date);
+  const rangeLabel = dateRangeLabel(dates);
+  const { ev, ss } = group[0];
+  const rawT = stripEntities(ev.title);
+  const partner = doubleFeaturePartner(rawT, ss);
+  const ssSecond = ssIsSecondFilm(rawT, ss);
+  const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+  const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
+  const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
+  const theater = LA_THEATERS.find(t => t.name === ev.theater);
+  const scheduleUrl = theater ? theater.scheduleUrl : '#';
+
+  const header = `
+    <div class="screening-row screening-group-header" onclick="toggleGroup(${id})" onkeydown="if(event.key==='Enter'||event.key===' ')toggleGroup(${id})" role="button" tabindex="0">
+      <span class="screening-date">${escHtml(rangeLabel)}</span>
+      <span class="screening-rank">${escHtml(rankStr)}</span>
+      <div class="screening-main">
+        <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
+        <div class="screening-meta">
+          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+          <span class="screening-count" id="group-arrow-${id}" data-count="${dates.length}">▶ ${dates.length}</span>
+        </div>
+      </div>
+    </div>`;
+
+  const sep = (partner && !partnerSS) ? ' / ' : ', ';
+  const children = group.map(({ ev: cev }) => {
+    const times = (cev.times || []).join(sep);
+    const childDate = formatScreeningDate(cev.date);
+    return `
+      <a class="screening-row screening-row-child" href="${escHtml(cev.url || scheduleUrl)}" target="_blank" rel="noopener">
+        <span class="screening-date">${escHtml(childDate)}</span>
+        <span class="screening-rank"></span>
+        <div class="screening-main">
+          <div class="screening-meta">
+            ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+          </div>
+        </div>
+      </a>`;
+  }).join('');
+
+  return `
+    <div class="screening-group">
+      ${header}
+      <div class="screening-group-children hidden" id="group-children-${id}">${children}</div>
+    </div>`;
+}
+
+function buildScreeningRows(matches, includeTheater) {
+  // Group by (ss.rank, theater) to collapse multi-day runs
+  const groupMap = new Map();
+  for (const m of matches) {
+    const key = `${m.ss.rank}__${m.ev.theater}`;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(m);
+  }
+  const rendered = new Set();
+  return matches.map(m => {
+    const key = `${m.ss.rank}__${m.ev.theater}`;
+    if (rendered.has(key)) return '';
+    rendered.add(key);
+    const group = groupMap.get(key);
+    return group.length === 1
+      ? buildSingleRow(m.ev, m.ss, includeTheater)
+      : buildGroupRow(group, includeTheater);
+  }).join('');
+}
+
 // --- Theater detail ---
 function renderTheaterDetail() {
   const detail = document.getElementById('theater-detail');
@@ -349,33 +466,7 @@ function renderTheaterDetail() {
     if (all.length === 0) {
       detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
     } else {
-      const rows = all.map(({ ev, ss }) => {
-        const rawT = stripEntities(ev.title);
-        const partner = doubleFeaturePartner(rawT, ss);
-        const ssSecond = ssIsSecondFilm(rawT, ss);
-        const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-        const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
-        const sep = (partner && !partnerSS) ? ' / ' : ', ';
-        const times = (ev.times || []).join(sep);
-        const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
-        const dateLabel = formatScreeningDate(ev.date);
-        const theater = LA_THEATERS.find(t => t.name === ev.theater);
-        const scheduleUrl = theater ? theater.scheduleUrl : '#';
-        return `
-          <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
-            <span class="screening-date">${escHtml(dateLabel)}</span>
-            <span class="screening-rank">${escHtml(rankStr)}</span>
-            <div class="screening-main">
-              <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
-              <div class="screening-meta">
-                <span class="screening-theater">${escHtml(ev.theater)}</span>
-                ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-                ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
-              </div>
-            </div>
-          </a>`;
-      }).join('');
-      detail.innerHTML = header + `<div class="screening-list">${rows}</div>`;
+      detail.innerHTML = header + `<div class="screening-list">${buildScreeningRows(all, true)}</div>`;
     }
     detail.classList.remove('hidden');
     return;
@@ -404,31 +495,7 @@ function renderTheaterDetail() {
   if (matches.length === 0) {
     detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
   } else {
-    const rows = matches.map(({ ev, ss }) => {
-      const rawT = stripEntities(ev.title);
-      const partner = doubleFeaturePartner(rawT, ss);
-      const ssSecond = ssIsSecondFilm(rawT, ss);
-      const partnerSS = partner ? findSSMatchByTitle(partner) : null;
-      const rankStr = partnerSS ? `#${ss.rank} / #${partnerSS.rank}` : `#${ss.rank}`;
-      const sep = (partner && !partnerSS) ? ' / ' : ', ';
-      const times = (ev.times || []).join(sep);
-      const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
-      const dateLabel = formatScreeningDate(ev.date);
-      return `
-        <a class="screening-row" href="${escHtml(ev.url || theater.scheduleUrl)}" target="_blank" rel="noopener">
-          <span class="screening-date">${escHtml(dateLabel)}</span>
-          <span class="screening-rank">${escHtml(rankStr)}</span>
-          <div class="screening-main">
-            <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
-            <div class="screening-meta">
-              ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-              ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
-            </div>
-          </div>
-        </a>`;
-    }).join('');
-
-    detail.innerHTML = header + `<div class="screening-list">${rows}</div>`;
+    detail.innerHTML = header + `<div class="screening-list">${buildScreeningRows(matches, false)}</div>`;
   }
 
   detail.classList.remove('hidden');

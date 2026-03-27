@@ -273,6 +273,35 @@ header h1 span { color: var(--accent); font-style: italic; }
   font-family: sans-serif;
 }
 
+/* ── Multi-day run groups ── */
+.screening-group-header {
+  cursor: pointer;
+  user-select: none;
+}
+.screening-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.1rem;
+  padding-left: 1rem;
+}
+.screening-row-child {
+  background: transparent;
+  border-color: transparent;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+.screening-row-child:hover {
+  border-color: var(--accent);
+  background: #1e1a0a;
+}
+.screening-count {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-family: sans-serif;
+  white-space: nowrap;
+}
+
 /* ── API setup ── */
 .api-setup {
   max-width: 540px;

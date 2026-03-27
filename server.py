@@ -77,6 +77,9 @@ def _build_cache():
         ('academy',              fetch_academy_events),
         ('braindead',            fetch_braindead_events),
         ('nuart',                fetch_nuart_events),
+        ('billywilder',          fetch_billywilder_events),
+        ('gardena',              fetch_gardena_events),
+        ('vidiots',              fetch_vidiots_events),
     ]:
         try:
             results['events'].extend(fetcher())
@@ -863,6 +866,195 @@ def fetch_nuart_events():
                 'poster':  poster_url,
                 'source':  'nuart',
             })
+
+    return events
+
+
+def fetch_billywilder_events():
+    """Billy Wilder Theatre (UCLA FTVA) — Craft CMS GraphQL API."""
+    from datetime import timezone, timedelta as td
+    today = date.today().strftime('%Y-%m-%d')
+    query = ('{ entries(section:"ftvaEvent", limit:200, orderBy:"startDateWithTime ASC",'
+             f' startDateWithTime:">= {today}") {{ title, uri, startDateWithTime }} }}')
+    r = requests.post('https://craft.library.ucla.edu/api',
+                      json={'query': query}, headers=HEADERS, timeout=20)
+    entries = r.json().get('data', {}).get('entries', [])
+
+    events = []
+    for entry in entries:
+        raw_title = entry.get('title', '')
+        # Strip trailing date suffix like " 03-27-26"
+        title = re.sub(r'\s+\d{2}-\d{2}-\d{2}\s*$', '', raw_title).strip()
+        if not title:
+            continue
+
+        start_str = entry.get('startDateWithTime', '')
+        if not start_str:
+            continue
+        dt_utc = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+        offset = td(hours=-7) if 3 <= dt_utc.month <= 10 else td(hours=-8)
+        dt_local = dt_utc.astimezone(timezone(offset))
+        date_str = dt_local.strftime('%Y-%m-%d')
+        time_str = dt_local.strftime('%-I:%M %p')
+
+        uri = entry.get('uri', '')
+        url = (f'https://www.cinema.ucla.edu/{uri}' if uri
+               else 'https://www.cinema.ucla.edu/events')
+
+        events.append({
+            'theater': 'Billy Wilder Theatre',
+            'title':   title,
+            'date':    date_str,
+            'times':   [time_str],
+            'url':     url,
+            'poster':  None,
+            'source':  'billywilder',
+        })
+
+    return events
+
+
+_GARDENA_SITETOKEN = 'he5nsxynkgmw2w1wvfey3mvh64'
+
+def fetch_gardena_events():
+    """Gardena Cinema — Veezi HTML sessions page (same structure as Vista)."""
+    url = f'{_VISTA_BASE}/sessions/?siteToken={_GARDENA_SITETOKEN}'
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    soup = BeautifulSoup(r.text, 'html.parser')
+
+    groups = {}
+
+    for date_div in soup.select('div#sessionsByDateConent div.date'):
+        date_h3 = date_div.select_one('h3.date-title')
+        if not date_h3:
+            continue
+        raw_date = date_h3.get_text(strip=True)
+        m = re.match(r'\w+\s+(\d+),\s+(\w+)', raw_date)
+        date_str = parse_date_str(f"{m.group(2)} {m.group(1)}") if m else None
+
+        for film_div in date_div.select('div.film'):
+            title_el = film_div.select_one('h3.title')
+            title = title_el.get_text(strip=True) if title_el else ''
+
+            img = film_div.select_one('img.poster')
+            poster = (_VISTA_BASE + img['src']) if img and img.get('src') else None
+
+            for li in film_div.select('ul.session-times li'):
+                time_el = li.select_one('time')
+                link_el = li.select_one('a[href]')
+                time_str = time_el.get_text(strip=True) if time_el else ''
+                sess_url = link_el['href'] if link_el else url
+
+                key = (title, date_str)
+                if key not in groups:
+                    groups[key] = {
+                        'title': title, 'date': date_str,
+                        'times': [], 'url': sess_url, 'poster': poster,
+                    }
+                if time_str and time_str not in groups[key]['times']:
+                    groups[key]['times'].append(time_str)
+
+    return [
+        {
+            'theater': 'Gardena Cinema',
+            'title':   g['title'],
+            'date':    g['date'],
+            'times':   g['times'],
+            'url':     g['url'],
+            'poster':  g['poster'],
+            'source':  'gardena',
+        }
+        for g in groups.values()
+    ]
+
+
+def fetch_vidiots_events():
+    """Vidiots — NightJar showtime listings API."""
+    r = requests.get('https://vidiotsfoundation.org/wp-json/nj/v1/showtime/listings',
+                     headers=HEADERS, timeout=20)
+    data = r.json()
+
+    movies = {m['movie_id']: m for m in data.get('movies', [])}
+
+    # Batch-fetch show details (format + poster) in chunks of 50
+    movie_ids = list(movies.keys())
+    show_details = {}  # id -> {'format': str, 'poster': str}
+    _FORMAT_MAP = {'Digital': 'Digital', '4K Digital': '4K Digital',
+                   '35mm Film': '35mm', '16mm Film': '16mm', '70mm Film': '70mm'}
+    for i in range(0, len(movie_ids), 50):
+        batch = movie_ids[i:i+50]
+        include_str = ','.join(str(m) for m in batch)
+        r2 = requests.get(
+            f'https://vidiotsfoundation.org/wp-json/nj/v1/show'
+            f'?include={include_str}&per_page=50',
+            headers=HEADERS, timeout=20
+        )
+        for show in r2.json():
+            sid = show.get('id')
+            if sid:
+                fmt_terms = show.get('format', [])
+                api_fmt = fmt_terms[0].get('name', '') if fmt_terms else ''
+                show_details[sid] = {
+                    'format': _FORMAT_MAP.get(api_fmt, api_fmt),
+                    'poster': show.get('featured_media_url') or None,
+                }
+
+    # Format suffix in title takes priority over taxonomy (e.g. "Film on 35mm")
+    _TITLE_FMT_RE = re.compile(
+        r'(?:\s+(?:on|in))?\s+(35mm|16mm|70mm)\s*$', re.IGNORECASE)
+
+    groups = {}
+    for st in data.get('showtimes', []):
+        mid = st['movie_id']
+        dt_raw = st.get('datetime', '')  # "20260327160000"
+        if len(dt_raw) < 8:
+            continue
+        date_str = f'{dt_raw[:4]}-{dt_raw[4:6]}-{dt_raw[6:8]}'
+        if len(dt_raw) >= 12:
+            hour, minute = int(dt_raw[8:10]), int(dt_raw[10:12])
+            ampm = 'AM' if hour < 12 else 'PM'
+            h12 = hour % 12 or 12
+            time_str = f'{h12}:{minute:02d} {ampm}'
+        else:
+            time_str = ''
+
+        key = (mid, date_str)
+        if key not in groups:
+            groups[key] = {
+                'date': date_str, 'times': [],
+                'url': st.get('purchase_url', 'https://vidiotsfoundation.org/coming-soon/'),
+            }
+        if time_str and time_str not in groups[key]['times']:
+            groups[key]['times'].append(time_str)
+
+    events = []
+    for (mid, date_str), g in groups.items():
+        movie = movies.get(mid, {})
+        raw_name = movie.get('movie_name', '')
+        if not raw_name:
+            continue
+
+        # Extract format from title suffix, else use taxonomy
+        fmt_m = _TITLE_FMT_RE.search(raw_name)
+        if fmt_m:
+            title = raw_name[:fmt_m.start()].strip()
+            fmt = fmt_m.group(1)
+        else:
+            title = raw_name
+            fmt = show_details.get(mid, {}).get('format', '')
+
+        poster = show_details.get(mid, {}).get('poster')
+
+        events.append({
+            'theater': 'Vidiots',
+            'title':   title,
+            'date':    date_str,
+            'times':   g['times'],
+            'format':  fmt,
+            'url':     g['url'],
+            'poster':  poster,
+            'source':  'vidiots',
+        })
 
     return events
 
