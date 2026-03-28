@@ -703,9 +703,7 @@ function renderTheaterDetail() {
     <div class="detail-header">
       <div class="detail-header-left">
         <div class="detail-title-row">
-          <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater='${escHtml(prevTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8249;</button>
           <div class="detail-theater-name"${nameStyle}>${escHtml(theater.name)}</div>
-          <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater='${escHtml(nextTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8250;</button>
         </div>
         <div class="detail-meta">
           ${escHtml(theater.neighborhood)}
@@ -715,7 +713,13 @@ function renderTheaterDetail() {
         ${theater.conservancyUrl ? `<a class="conservancy-badge" href="${theater.conservancyUrl}" target="_blank" rel="noopener">&#9733; <span>Historic Designation by LA Conservancy</span></a>` : ''}
         ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
       </div>
-      <a class="detail-schedule-link" href="${theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
+      <div class="detail-header-right">
+        <a class="detail-schedule-link" href="${theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
+        <div class="theater-nav-arrows">
+          <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater='${escHtml(prevTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8249;</button>
+          <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater='${escHtml(nextTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8250;</button>
+        </div>
+      </div>
     </div>`;
 
   if (matches.length === 0) {
