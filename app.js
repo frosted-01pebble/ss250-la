@@ -703,9 +703,9 @@ function renderTheaterDetail() {
     <div class="detail-header">
       <div class="detail-header-left">
         <div class="detail-title-row">
-          <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater=${JSON.stringify(prevTheater.name)};renderTheaterNav();renderTheaterDetail()">&#8249;</button>
+          <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater='${escHtml(prevTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8249;</button>
           <div class="detail-theater-name"${nameStyle}>${escHtml(theater.name)}</div>
-          <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater=${JSON.stringify(nextTheater.name)};renderTheaterNav();renderTheaterDetail()">&#8250;</button>
+          <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater='${escHtml(nextTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8250;</button>
         </div>
         <div class="detail-meta">
           ${escHtml(theater.neighborhood)}
