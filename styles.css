@@ -35,6 +35,7 @@ header h1 {
   line-height: 1.2;
 }
 header h1 span { color: var(--accent); font-style: italic; }
+.header-sub { color: var(--muted); font-style: normal; }
 .subtitle { margin-top: 0.5rem; color: var(--muted); font-size: 0.9rem; font-style: italic; }
 
 /* ── Theater nav ── */
