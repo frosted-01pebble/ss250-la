@@ -126,11 +126,15 @@ def _build_cache():
     # Preserve today's events from the previous cache (in-memory or disk) that the
     # fresh fetch may have dropped — handles both mid-day venue API removals and
     # cold starts after a server restart.
+    _EXHIBITION_PREFIXES = ('Calm Morning:', 'Family Matinee Series:')
     prev_data = _cache.get('data') or _load_events_from_disk()
     if prev_data:
         new_keys = {(e['theater'], e['title'], e['date']) for e in results['events']}
         for ev in prev_data.get('events', []):
-            if ev.get('date') == today_str and (ev['theater'], ev['title'], ev['date']) not in new_keys:
+            t = ev.get('title', '')
+            if any(t.startswith(p) for p in _EXHIBITION_PREFIXES):
+                continue  # never restore exhibition events
+            if ev.get('date') == today_str and (ev['theater'], t, ev['date']) not in new_keys:
                 results['events'].append(ev)
 
     _enrich_double_features(results['events'])
@@ -566,6 +570,10 @@ def fetch_academy_events():
             title = str(title_field)
         title = re.sub(r'\s+', ' ', title).strip()
         if not title:
+            continue
+        # Skip exhibition/educational series that are not film screenings
+        _EXHIBITION_PREFIXES = ('Calm Morning:', 'Family Matinee Series:')
+        if any(title.startswith(p) for p in _EXHIBITION_PREFIXES):
             continue
 
         img       = prog.get('image') or {}

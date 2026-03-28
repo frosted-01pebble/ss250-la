@@ -189,6 +189,18 @@ function formatScreeningDate(dateStr) {
 // --- Double-bill deduplication ---
 // When the scraper returns separate events for each film in a double bill
 // (same theater, date, and times), merge them into one row showing both films.
+// Parse a 12-hour time string like "9:00 AM" or "11:30 PM" into minutes since midnight.
+function _timeToMinutes(t) {
+  const m = (t || '').match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const pm = m[3].toUpperCase() === 'PM';
+  if (pm && h !== 12) h += 12;
+  if (!pm && h === 12) h = 0;
+  return h * 60 + min;
+}
+
 // Also merges multiple showtimes of the same film on the same day at the same theater.
 function mergeDoubleBills(matches) {
   const slotMap = new Map();
@@ -213,8 +225,8 @@ function mergeDoubleBills(matches) {
     seenFilmDay.add(id);
     const group = filmDayMap.get(id);
     if (group.length > 1) {
-      // Merge all times from repeat screenings into the first entry
-      const allTimes = [...new Set(group.flatMap(g => g.ev.times || []))].sort();
+      // Merge all times from repeat screenings into the first entry, sorted chronologically
+      const allTimes = [...new Set(group.flatMap(g => g.ev.times || []))].sort((a, b) => _timeToMinutes(a) - _timeToMinutes(b));
       mergedMatches.push({ ev: { ...group[0].ev, times: allTimes }, ss: group[0].ss });
     } else {
       mergedMatches.push(m);
