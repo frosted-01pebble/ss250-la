@@ -13,7 +13,7 @@ const LA_THEATERS = [
   {
     name: "Academy Museum",
     neighborhood: "Mid-Wilshire",
-    type: "arthouse",
+    type: "repertory",
     note: "Theatrical screenings at the Academy Museum of Motion Pictures",
     opened: 2021,
     history: "Opened September 30, 2021, in a renovated 1939 May Company building paired with a new glass sphere designed by Renzo Piano. The complex houses two cinemas: the 288-seat Ted Mann Theatre and the 1,000-seat David Geffen Theatre, which debuted with a live-orchestra screening of The Wizard of Oz. It is operated by the Academy of Motion Picture Arts and Sciences.",
@@ -57,7 +57,7 @@ const LA_THEATERS = [
   {
     name: "Los Feliz 3",
     neighborhood: "Los Feliz",
-    type: "repertory",
+    type: "arthouse",
     note: "American Cinematheque — classic & foreign film",
     opened: 1935,
     history: "Opened February 14, 1935 as a single-screen venue with 780 seats in the upscale Los Feliz neighborhood. It was triplexed in 1993, creating three screens of varying sizes. Today one auditorium is operated by American Cinematheque for repertory programming, while Vintage Cinemas manages the remaining screens.",
@@ -80,7 +80,7 @@ const LA_THEATERS = [
   {
     name: "Vista Theatre",
     neighborhood: "Los Feliz",
-    type: "arthouse",
+    type: "mainstream",
     note: "1923 single-screen gem, owned by Tarantino",
     opened: 1923,
     history: "Opened October 16, 1923 as Lou Bard's Hollywood Theatre, featuring a Spanish Revival exterior and an elaborate Egyptian-style interior influenced by the 1922 discovery of Tutankhamen's tomb. Filmmaker Quentin Tarantino purchased it in 2021 and reopened it in 2023 with fully restored 35mm, 70mm, and VistaVision projection capabilities.",
@@ -118,6 +118,7 @@ const LA_THEATERS = [
     type: "repertory",
     note: "Beloved nonprofit video store reborn as a cinema",
     opened: 2022,
+    openedLabel: "Re-Est.",
     history: "Vidiots began in 1985 as an independent video rental store in Santa Monica celebrated for its extraordinary collection of rare and eclectic titles. After closing in 2017, it was revived as a nonprofit foundation and reopened in 2022 inside the historic Eagle Theatre at 4901 Eagle Rock Blvd in Northeast Los Angeles. The new Vidiots combines a cinema programming classic, cult, and world films with a lending library of over 50,000 physical media titles.",
     url: "https://vidiotsfoundation.org/coming-soon/",
     scheduleUrl: "https://vidiotsfoundation.org/coming-soon/",

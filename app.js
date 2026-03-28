@@ -230,7 +230,6 @@ function renderSS250Grid() {
             ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
             : `<div class="ss250-poster-placeholder">🎬</div>`}
           <span class="ss250-rank">${rankLabel(f.rank)}</span>
-          ${f.overview ? `<div class="ss250-overview">${escHtml((f.overview.match(/^.*?[.!?](?:\s|$)/) || [f.overview])[0].trim())}</div>` : ''}
         </div>
       </a>
       <div class="ss250-card-info">
@@ -285,7 +284,30 @@ function renderTheaterNav() {
   const nav = document.getElementById('theater-nav');
 
   if (!scraperLoaded) {
-    nav.innerHTML = '<span class="nav-loading">Loading schedules…</span>';
+    nav.innerHTML = `<div class="nav-loading">
+      <svg class="reel-spinner" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer ring -->
+        <circle cx="40" cy="40" r="37" fill="none" stroke="currentColor" stroke-width="3"/>
+        <!-- Inner hub ring -->
+        <circle cx="40" cy="40" r="10" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        <!-- Center hole -->
+        <circle cx="40" cy="40" r="4" fill="currentColor"/>
+        <!-- 3 spokes -->
+        <line x1="40" y1="14" x2="40" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="14.1" y1="55" x2="20.4" y2="46.1" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="65.9" y1="55" x2="59.6" y2="46.1" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- 8 sprocket holes evenly around inner ring at r=24 -->
+        <circle cx="40"    cy="16"    r="3.2" fill="var(--bg)"/>
+        <circle cx="56.97" cy="23.03" r="3.2" fill="var(--bg)"/>
+        <circle cx="64"    cy="40"    r="3.2" fill="var(--bg)"/>
+        <circle cx="56.97" cy="56.97" r="3.2" fill="var(--bg)"/>
+        <circle cx="40"    cy="64"    r="3.2" fill="var(--bg)"/>
+        <circle cx="23.03" cy="56.97" r="3.2" fill="var(--bg)"/>
+        <circle cx="16"    cy="40"    r="3.2" fill="var(--bg)"/>
+        <circle cx="23.03" cy="23.03" r="3.2" fill="var(--bg)"/>
+      </svg>
+      Loading schedules…
+    </div>`;
     nav.classList.remove('hidden');
     return;
   }
@@ -566,7 +588,7 @@ function renderTheaterDetail() {
         <div class="detail-meta">
           ${escHtml(theater.neighborhood)}
           &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>
-          ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">Est. ${theater.opened}</span>` : ''}
+          ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">${theater.openedLabel || 'Est.'} ${theater.opened}</span>` : ''}
         </div>
         ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
       </div>

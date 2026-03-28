@@ -1184,8 +1184,69 @@ def _fetch_imdb_id(tmdb_id):
     except Exception:
         return None
 
+# Films that need direct TMDB IDs due to ambiguous search results or TV-only entries.
+_FILM_TMDB_OVERRIDES = {
+    ('close-up', 1989):               {'movie_id': 30017},
+    ('the intruder', 2004):           {'movie_id': 47143},
+    ('partie de campagne', 1936):     {'movie_id': 43878},
+    ('twin peaks: the return', 2017): {'tv_id': 1920, 'season': 3, 'imdb_id': 'tt4093826'},
+}
+
+def _best_poster_path(tmdb_id, media_type='movie', season=None):
+    """Return the file_path of the highest-voted poster from TMDB images endpoint."""
+    try:
+        if media_type == 'tv' and season is not None:
+            url = f'https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season}/images'
+        elif media_type == 'tv':
+            url = f'https://api.themoviedb.org/3/tv/{tmdb_id}/images'
+        else:
+            url = f'https://api.themoviedb.org/3/movie/{tmdb_id}/images'
+        r = requests.get(url, params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
+        posters = r.json().get('posters', [])
+        if posters:
+            posters.sort(key=lambda p: (p.get('vote_count', 0), p.get('vote_average', 0)), reverse=True)
+            return posters[0]['file_path']
+    except Exception:
+        pass
+    return None
+
 def _fetch_one_poster(film):
     title, year = film['title'], film['year']
+    key = (title.lower(), year)
+
+    # Hardcoded override for films that are ambiguous or TV-only
+    if key in _FILM_TMDB_OVERRIDES:
+        ov = _FILM_TMDB_OVERRIDES[key]
+        if 'tv_id' in ov:
+            try:
+                r = requests.get(
+                    f'https://api.themoviedb.org/3/tv/{ov["tv_id"]}/season/{ov["season"]}',
+                    params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
+                d = r.json()
+                overview = d.get('overview') or None
+                path = _best_poster_path(ov['tv_id'], media_type='tv', season=ov['season']) \
+                       or d.get('poster_path')
+                poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
+                imdb_id = ov.get('imdb_id')
+                imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
+                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
+            except Exception:
+                pass
+        else:
+            try:
+                r = requests.get(
+                    f'https://api.themoviedb.org/3/movie/{ov["movie_id"]}',
+                    params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
+                d = r.json()
+                overview = d.get('overview') or None
+                path = _best_poster_path(ov['movie_id']) or d.get('poster_path')
+                poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
+                imdb_id = _fetch_imdb_id(ov['movie_id'])
+                imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
+                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
+            except Exception:
+                pass
+
     result = None
     # 1. Exact year match
     result = _tmdb_search(title, year)
@@ -1204,10 +1265,10 @@ def _fetch_one_poster(film):
     if not result:
         return {**film, 'poster': None, 'overview': None, 'imdb_url': None}
 
-    path = result.get('poster_path')
-    poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
     overview = result.get('overview') or None
     tmdb_id = result.get('id')
+    path = _best_poster_path(tmdb_id) if tmdb_id else result.get('poster_path')
+    poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
     imdb_id = _fetch_imdb_id(tmdb_id) if tmdb_id else None
     imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
     return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
