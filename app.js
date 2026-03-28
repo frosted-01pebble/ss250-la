@@ -511,7 +511,7 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
   const dateLabel = formatScreeningDate(ev.date);
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
-  const scheduleUrl = theater ? theater.scheduleUrl : '#';
+  const scheduleUrl = theater ? (typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl) : '#';
   return `
     <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
       <span class="screening-date">${escHtml(dateLabel)}</span>
@@ -540,7 +540,7 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
   const rankStr = partnerSS ? `${rl(ss.rank)} / ${rl(partnerSS.rank)}` : rl(ss.rank);
   const fmt = (ev.format || '').split(',').map(f => f.trim()).join(' / ');
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
-  const scheduleUrl = theater ? theater.scheduleUrl : '#';
+  const scheduleUrl = theater ? (typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl) : '#';
 
   const header = `
     <div class="screening-row screening-group-header" onclick="toggleGroup(${id})" onkeydown="if(event.key==='Enter'||event.key===' ')toggleGroup(${id})" role="button" tabindex="0">
@@ -714,7 +714,7 @@ function renderTheaterDetail() {
         ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
       </div>
       <div class="detail-header-right">
-        <a class="detail-schedule-link" href="${theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
+        <a class="detail-schedule-link" href="${typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
         <div class="theater-nav-arrows">
           <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater='${escHtml(prevTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8249;</button>
           <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater='${escHtml(nextTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8250;</button>
