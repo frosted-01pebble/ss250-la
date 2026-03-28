@@ -563,10 +563,35 @@ header h1 span { color: var(--accent); font-style: italic; }
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
+.ss250-card-director {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-family: sans-serif;
+  margin-bottom: 0.15rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ss250-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
 .ss250-card-year {
   font-size: 0.68rem;
   color: var(--muted);
   font-family: sans-serif;
+}
+.ss250-card-countries {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-family: sans-serif;
+  opacity: 0.75;
+}
+.ss250-card-countries::before {
+  content: '·';
+  margin-right: 0.35rem;
 }
 
 .hidden { display: none !important; }

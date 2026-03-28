@@ -1226,6 +1226,31 @@ def _best_poster_path(tmdb_id, media_type='movie', season=None):
         pass
     return None
 
+_COUNTRY_SHORT = {
+    'United States of America': 'USA',
+    'United Kingdom': 'UK',
+    'Soviet Union': 'USSR',
+    'West Germany': 'W. Germany',
+    'Hong Kong': 'Hong Kong',
+}
+
+def _extract_movie_meta(d):
+    """Extract director, countries from a TMDB movie detail dict (with credits appended)."""
+    directors = [c['name'] for c in (d.get('credits') or {}).get('crew', [])
+                 if c.get('job') == 'Director']
+    director = ', '.join(directors) if directors else None
+    raw_countries = [c.get('name', '') for c in (d.get('production_countries') or [])]
+    countries = [_COUNTRY_SHORT.get(c, c) for c in raw_countries]
+    return director, countries
+
+def _fetch_movie_detail(tmdb_id):
+    """Fetch full movie detail including credits in one call."""
+    r = requests.get(
+        f'https://api.themoviedb.org/3/movie/{tmdb_id}',
+        params={'api_key': TMDB_KEY, 'append_to_response': 'credits'},
+        headers=HEADERS, timeout=10)
+    return r.json()
+
 def _fetch_one_poster(film):
     title, year = film['title'], film['year']
     key = (title.lower(), year)
@@ -1245,21 +1270,32 @@ def _fetch_one_poster(film):
                 poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
                 imdb_id = ov.get('imdb_id')
                 imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
-                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
+                # Fetch TV show details for director/country
+                tv_r = requests.get(f'https://api.themoviedb.org/3/tv/{ov["tv_id"]}',
+                                    params={'api_key': TMDB_KEY, 'append_to_response': 'credits'},
+                                    headers=HEADERS, timeout=10)
+                tv_d = tv_r.json()
+                directors = [c['name'] for c in tv_d.get('credits', {}).get('crew', [])
+                             if c.get('job') == 'Director']
+                director = directors[0] if directors else \
+                           (tv_d.get('created_by') or [{}])[0].get('name')
+                raw_countries = [c.get('name','') for c in tv_d.get('production_countries', [])]
+                countries = [_COUNTRY_SHORT.get(c, c) for c in raw_countries]
+                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url,
+                        'director': director, 'countries': countries}
             except Exception:
                 pass
         else:
             try:
-                r = requests.get(
-                    f'https://api.themoviedb.org/3/movie/{ov["movie_id"]}',
-                    params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
-                d = r.json()
+                d = _fetch_movie_detail(ov['movie_id'])
                 overview = d.get('overview') or None
                 path = _best_poster_path(ov['movie_id']) or d.get('poster_path')
                 poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
                 imdb_id = _fetch_imdb_id(ov['movie_id'])
                 imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
-                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
+                director, countries = _extract_movie_meta(d)
+                return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url,
+                        'director': director, 'countries': countries}
             except Exception:
                 pass
 
@@ -1279,15 +1315,22 @@ def _fetch_one_poster(film):
         result = _tmdb_search(title)
 
     if not result:
-        return {**film, 'poster': None, 'overview': None, 'imdb_url': None}
+        return {**film, 'poster': None, 'overview': None, 'imdb_url': None,
+                'director': None, 'countries': []}
 
-    overview = result.get('overview') or None
     tmdb_id = result.get('id')
+    try:
+        d = _fetch_movie_detail(tmdb_id)
+    except Exception:
+        d = result
+    overview = d.get('overview') or result.get('overview') or None
     path = _best_poster_path(tmdb_id) if tmdb_id else result.get('poster_path')
     poster = f'https://image.tmdb.org/t/p/w342{path}' if path else None
     imdb_id = _fetch_imdb_id(tmdb_id) if tmdb_id else None
     imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
-    return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
+    director, countries = _extract_movie_meta(d)
+    return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url,
+            'director': director, 'countries': countries}
 
 SS250_DISK_CACHE = 'ss250_data.json'
 
