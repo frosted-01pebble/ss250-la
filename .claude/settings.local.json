@@ -120,7 +120,12 @@
       "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\).get\\(''''imdb_id''''\\)\\)\")",
       "Bash(TMDB_KEY=\"8054ed3692dfed2068f4c209e12148a2\" curl -s \"https://api.themoviedb.org/3/movie/30017?api_key=$TMDB_KEY\")",
       "Bash(curl -s http://localhost:5001/api/loading-status)",
-      "Bash(git -C /Users/samgallen/SS status --short)"
+      "Bash(git -C /Users/samgallen/SS status --short)",
+      "Bash(curl -s https://www.ss250la.com/api/showtimes)",
+      "Bash(curl -si https://www.ss250la.com/api/showtimes)",
+      "Bash(curl -v --max-time 10 https://www.ss250la.com/)",
+      "Bash(curl -s --max-time 15 https://www.ss250la.com/api/loading-status)",
+      "Bash(curl -sk --max-time 15 https://www.ss250la.com/api/loading-status)"
     ]
   }
 }
