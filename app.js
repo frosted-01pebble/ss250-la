@@ -282,7 +282,7 @@ function renderSS250Panel() {
 
   const about = `
     <div class="ss250-about">
-      <h2 class="ss250-about-title">The Sight &amp; Sound 250</h2>
+      <h2 class="ss250-about-title"><a href="https://www.bfi.org.uk/sight-and-sound/greatest-films-all-time" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">The Sight &amp; Sound 250</a></h2>
       <p>Since 1952, the British Film Institute's <em>Sight &amp; Sound</em> magazine has polled critics,
       programmers, curators, and academics every decade to name the greatest films ever made. For half
       a century Orson Welles's <em>Citizen Kane</em> held the top spot almost without interruption —
