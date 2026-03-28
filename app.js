@@ -53,6 +53,7 @@ const TITLE_ALIASES = {
   "close-up":                ["close up", "nema-ye nazdik"],
   "night of the hunter":     ["the night of the hunter"],
   "fear eats the soul":      ["ali fear eats the soul", "angst essen seele auf"],
+  "my neighbour totoro":     ["my neighbor totoro"],
 };
 
 function titlesMatch(ssTitle, tmdbTitle, tmdbOrigTitle) {
@@ -80,21 +81,36 @@ function findSSMatch(tmdbMovie) {
 
 // Match scraper title against S&S list — handles "in 35mm", "(Alt Title)", combined programs
 function findSSMatchByTitle(rawTitle) {
+  const stripFormats = t => t.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim();
+  const stripParens  = t => t.replace(/\s*\([^)]+\)/g, '').trim();
+
   const variants = new Set([rawTitle]);
-  variants.add(rawTitle.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim());
-  variants.add(rawTitle.replace(/\s*\([^)]+\)/g, '').trim());
-  const noSuffix = rawTitle.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim();
-  variants.add(noSuffix.replace(/\s*\([^)]+\)/g, '').trim());
-  // Split double features: ' / ' (AC), '/' (Vista), ' with ', ' + ', ' & '
+  variants.add(stripFormats(rawTitle));
+  variants.add(stripParens(rawTitle));
+  variants.add(stripParens(stripFormats(rawTitle)));
+
+  // Strip "Prefix: " colon-prefixes (e.g. "Calm Morning: My Neighbor Totoro")
+  const colonIdx = rawTitle.indexOf(': ');
+  if (colonIdx > 0) {
+    const afterColon = rawTitle.slice(colonIdx + 2).trim();
+    variants.add(afterColon);
+    variants.add(stripFormats(afterColon));
+    variants.add(stripParens(afterColon));
+  }
+
+  // Split double features: strip year annotations first so "(1972)" doesn't block matching
+  const cleanForSplit = stripParens(rawTitle);
   for (const sep of [' with ', ' + ', ' / ', ' & ', '/']) {
-    if (rawTitle.includes(sep)) {
-      for (const part of rawTitle.split(sep)) {
-        variants.add(part.trim());
-        variants.add(part.replace(/\s*\([^)]+\)/g, '').trim());
-        variants.add(part.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim());
-      }
+    const src = rawTitle.includes(sep) ? rawTitle : (cleanForSplit.includes(sep) ? cleanForSplit : null);
+    if (!src) continue;
+    for (const part of src.split(sep)) {
+      variants.add(part.trim());
+      variants.add(stripParens(part.trim()));
+      variants.add(stripFormats(part.trim()));
+      variants.add(stripParens(stripFormats(part.trim())));
     }
   }
+
   for (const v of variants) {
     if (!v) continue;
     for (const ss of SS250_CANONICAL) {
