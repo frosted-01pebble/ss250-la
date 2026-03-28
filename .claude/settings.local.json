@@ -125,7 +125,9 @@
       "Bash(curl -si https://www.ss250la.com/api/showtimes)",
       "Bash(curl -v --max-time 10 https://www.ss250la.com/)",
       "Bash(curl -s --max-time 15 https://www.ss250la.com/api/loading-status)",
-      "Bash(curl -sk --max-time 15 https://www.ss250la.com/api/loading-status)"
+      "Bash(curl -sk --max-time 15 https://www.ss250la.com/api/loading-status)",
+      "Bash(curl -sk --max-time 15 https://ss250-la.up.railway.app/api/loading-status)",
+      "Bash(curl -sk --max-time 15 https://ss250-la.up.railway.app/api/showtimes)"
     ]
   }
 }
