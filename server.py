@@ -1289,6 +1289,29 @@ def _fetch_one_poster(film):
     imdb_url = f'https://www.imdb.com/title/{imdb_id}/' if imdb_id else None
     return {**film, 'poster': poster, 'overview': overview, 'imdb_url': imdb_url}
 
+SS250_DISK_CACHE = 'ss250_data.json'
+
+def _load_ss250_from_disk():
+    """Load pre-fetched SS250 data from disk. Returns list or None."""
+    try:
+        with open(SS250_DISK_CACHE, encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list) and data:
+            print(f'SS250: loaded {len(data)} films from disk cache')
+            return data
+    except Exception:
+        pass
+    return None
+
+def _save_ss250_to_disk(data):
+    """Persist SS250 data to disk for fast startup."""
+    try:
+        with open(SS250_DISK_CACHE, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        print(f'SS250: saved {len(data)} films to disk cache')
+    except Exception as e:
+        print(f'SS250: failed to save disk cache: {e}')
+
 def _build_ss250_cache():
     films = _load_ss250_from_js()
     if not films:
@@ -1298,9 +1321,11 @@ def _build_ss250_cache():
         futures = {ex.submit(_fetch_one_poster, f): i for i, f in enumerate(films)}
         for fut in as_completed(futures):
             enriched[futures[fut]] = fut.result()
-    _ss250_cache['data'] = [f for f in enriched if f]
+    data = [f for f in enriched if f]
+    _ss250_cache['data'] = data
     _ss250_cache['fetched_at'] = time.time()
-    print(f'SS250 poster cache built — {len(_ss250_cache["data"])} films')
+    _save_ss250_to_disk(data)
+    print(f'SS250 poster cache built — {len(data)} films')
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -1318,8 +1343,21 @@ def showtimes():
 
 @app.route('/api/ss250')
 def ss250_api():
-    if _ss250_cache['data'] is None or time.time() - _ss250_cache['fetched_at'] > SS250_CACHE_TTL:
-        threading.Thread(target=_build_ss250_cache, daemon=True).start() if _ss250_cache['data'] else _build_ss250_cache()
+    if _ss250_cache['data'] is None:
+        # Try disk cache first — instant load
+        disk = _load_ss250_from_disk()
+        if disk:
+            _ss250_cache['data'] = disk
+            _ss250_cache['fetched_at'] = time.time()
+            # Refresh from TMDB in background if disk cache is stale
+            if time.time() - os.path.getmtime(SS250_DISK_CACHE) > SS250_CACHE_TTL:
+                threading.Thread(target=_build_ss250_cache, daemon=True).start()
+        else:
+            # No disk cache — build synchronously on first hit
+            _build_ss250_cache()
+    elif time.time() - _ss250_cache['fetched_at'] > SS250_CACHE_TTL:
+        # In-memory cache stale — refresh in background, serve existing data
+        threading.Thread(target=_build_ss250_cache, daemon=True).start()
     return jsonify(_ss250_cache['data'] or [])
 
 @app.route('/health')
