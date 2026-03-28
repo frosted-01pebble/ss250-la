@@ -119,9 +119,9 @@ header h1 span { color: var(--accent); font-style: italic; }
   background: none;
   border: none;
   color: var(--muted);
-  padding: 0.4rem 0.6rem 0.4rem 1rem;
+  padding: 0.55rem 0.7rem 0.55rem 1.1rem;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-family: sans-serif;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -136,9 +136,9 @@ header h1 span { color: var(--accent); font-style: italic; }
   border: none;
   border-left: 1px solid var(--border);
   color: var(--muted);
-  padding: 0.4rem 0.7rem;
+  padding: 0.55rem 0.9rem;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   line-height: 1;
   transition: color 0.15s, background 0.15s;
 }
