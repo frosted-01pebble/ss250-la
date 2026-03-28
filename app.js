@@ -703,6 +703,7 @@ function renderTheaterDetail() {
           &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>
           ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">${theater.openedLabel || 'Est.'} ${theater.opened}</span>` : ''}
         </div>
+        ${theater.conservancyUrl ? `<a class="conservancy-badge" href="${theater.conservancyUrl}" target="_blank" rel="noopener">&#9733; <span>Historic Designation by LA Conservancy</span></a>` : ''}
         ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
       </div>
       <a class="detail-schedule-link" href="${theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
