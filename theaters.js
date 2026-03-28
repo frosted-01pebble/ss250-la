@@ -115,7 +115,7 @@ const LA_THEATERS = [
     opened: 1923,
     history: "Opened October 16, 1923 as Lou Bard's Hollywood Theatre, featuring a Spanish Revival exterior and an elaborate Egyptian-style interior influenced by the 1922 discovery of Tutankhamen's tomb. Filmmaker Quentin Tarantino purchased it in 2021 and reopened it in 2023 with fully restored 35mm, 70mm, and VistaVision projection capabilities.",
     url: "https://www.vintagecinemas.com/vista/",
-    scheduleUrl: "https://www.vintagecinemas.com/vista/",
+    scheduleUrl: "https://ticketing.uswest.veezi.com/sessions/?siteToken=20xhpa3yt2hhkwt4zjvfcwsaww",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Vista Theatre Los Feliz')}`,
     fontFamily: "'Cinzel', serif",
