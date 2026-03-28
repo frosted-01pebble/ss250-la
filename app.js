@@ -344,6 +344,42 @@ function renderSS250Grid() {
     </div>`).join('');
 }
 
+function renderTheatersGallery() {
+  const detail = document.getElementById('theater-detail');
+  const cards = LA_THEATERS.map(theater => {
+    const illus = (typeof THEATER_ILLUSTRATIONS !== 'undefined' && THEATER_ILLUSTRATIONS[theater.name])
+      ? THEATER_ILLUSTRATIONS[theater.name]
+      : `<svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="192" height="142" rx="4" stroke="currentColor" fill="none" stroke-width="1" opacity="0.3"/></svg>`;
+    const typeLabel = { repertory: 'Repertory', arthouse: 'Arthouse', mainstream: 'Mainstream' }[theater.type] || '';
+    const openedText = theater.opened ? `${theater.openedLabel || 'Est.'} ${theater.opened}` : '';
+    return `<button class="theater-gallery-card" data-theater="${escHtml(theater.name)}">
+      <div class="theater-gallery-illus">${illus}</div>
+      <div class="theater-gallery-info">
+        <div class="theater-gallery-name">${escHtml(theater.name)}</div>
+        <div class="theater-gallery-meta">${escHtml(theater.neighborhood)}${typeLabel ? ` &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>` : ''}${openedText ? ` &nbsp;·&nbsp;${escHtml(openedText)}` : ''}</div>
+      </div>
+    </button>`;
+  }).join('');
+
+  detail.innerHTML = `<div class="theater-gallery">
+    <div class="theater-gallery-header">
+      <div class="theater-gallery-title">LA Movie Theaters</div>
+      <div class="theater-gallery-sub">Click a theater to see upcoming Sight &amp; Sound screenings</div>
+    </div>
+    <div class="theater-gallery-grid">${cards}</div>
+  </div>`;
+
+  detail.querySelectorAll('.theater-gallery-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedTheater = card.dataset.theater;
+      renderTheaterNav();
+      renderTheaterDetail();
+    });
+  });
+
+  detail.classList.remove('hidden');
+}
+
 function renderSS250Panel() {
   const detail = document.getElementById('theater-detail');
 
@@ -416,15 +452,17 @@ function renderTheaterNav() {
     return;
   }
 
-  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
+  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' && selectedTheater !== '__theaters__' ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
+  const splitActive = (theaterName || selectedTheater === '__theaters__') ? ' active' : '';
 
   nav.innerHTML = `
     <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
     <div class="theater-dropdown-wrap">
-      <button class="theater-btn theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">
-        ${dropdownLabel} ▾
-      </button>
+      <div class="theater-split-btn${splitActive}">
+        <button class="theater-split-label" id="theater-gallery-btn">${dropdownLabel}</button>
+        <button class="theater-split-arrow" id="theater-dropdown-btn" title="Select theater">▾</button>
+      </div>
       <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
         ${[...LA_THEATERS].sort((a, b) => a.name.localeCompare(b.name)).map(t => `
           <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
@@ -447,6 +485,13 @@ function renderTheaterNav() {
     closeDropdown();
     renderTheaterNav();
     renderSS250Panel();
+  });
+
+  nav.querySelector('#theater-gallery-btn').addEventListener('click', () => {
+    selectedTheater = '__theaters__';
+    closeDropdown();
+    renderTheaterNav();
+    renderTheatersGallery();
   });
 
   const dropBtn = nav.querySelector('#theater-dropdown-btn');
@@ -622,6 +667,11 @@ function renderTheaterDetail() {
 
   if (selectedTheater === '__ss250__') {
     renderSS250Panel();
+    return;
+  }
+
+  if (selectedTheater === '__theaters__') {
+    renderTheatersGallery();
     return;
   }
 
