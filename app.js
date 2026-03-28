@@ -250,7 +250,11 @@ function renderSS250Grid() {
 
   const q = ss250Query.trim().toLowerCase();
   let films = [...ss250Data];
-  if (q) films = films.filter(f => f.title.toLowerCase().includes(q));
+  if (q) films = films.filter(f =>
+    f.title.toLowerCase().includes(q) ||
+    (f.director && f.director.toLowerCase().includes(q)) ||
+    String(f.year).includes(q)
+  );
   if (ss250Sort === 'title') films.sort((a, b) => a.title.localeCompare(b.title));
   else if (ss250Sort === 'year') films.sort((a, b) => a.year - b.year || a.rank - b.rank);
   else films.sort((a, b) => a.rank - b.rank);
