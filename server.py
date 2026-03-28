@@ -21,6 +21,21 @@ CORS(app)
 _cache = {'data': None, 'fetched_at': 0}
 CACHE_TTL = 3600  # refresh every hour
 _loading_progress = {'status': 'idle', 'done': 0, 'total': 0}
+EVENTS_DISK_CACHE = os.path.join(os.path.dirname(__file__), 'events_cache.json')
+
+def _save_events_to_disk(data):
+    try:
+        with open(EVENTS_DISK_CACHE, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f'Events: failed to save disk cache: {e}')
+
+def _load_events_from_disk():
+    try:
+        with open(EVENTS_DISK_CACHE, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 _year_cache = {}  # title -> year int or None
 
@@ -108,8 +123,10 @@ def _build_cache():
         for f in as_completed(futures):
             pass
 
-    # Preserve today's events from the previous cache that the fresh fetch may have dropped.
-    prev_data = _cache.get('data')
+    # Preserve today's events from the previous cache (in-memory or disk) that the
+    # fresh fetch may have dropped — handles both mid-day venue API removals and
+    # cold starts after a server restart.
+    prev_data = _cache.get('data') or _load_events_from_disk()
     if prev_data:
         new_keys = {(e['theater'], e['title'], e['date']) for e in results['events']}
         for ev in prev_data.get('events', []):
@@ -119,6 +136,7 @@ def _build_cache():
     _enrich_double_features(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
+    _save_events_to_disk(results)
     _loading_progress['status'] = 'ready'
     print(f"Cache refreshed — {len(results['events'])} events, errors: {list(results['errors'].keys()) or 'none'}")
 

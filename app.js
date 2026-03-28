@@ -189,6 +189,7 @@ function formatScreeningDate(dateStr) {
 // --- Double-bill deduplication ---
 // When the scraper returns separate events for each film in a double bill
 // (same theater, date, and times), merge them into one row showing both films.
+// Also merges multiple showtimes of the same film on the same day at the same theater.
 function mergeDoubleBills(matches) {
   const slotMap = new Map();
   for (const m of matches) {
@@ -197,14 +198,44 @@ function mergeDoubleBills(matches) {
     if (!slotMap.has(key)) slotMap.set(key, []);
     slotMap.get(key).push(m);
   }
+  // First pass: merge same-film repeat screenings (same theater+date+ss, different times)
+  const filmDayMap = new Map();
+  for (const m of matches) {
+    const id = `${m.ev.theater}__${m.ev.date}__${m.ss.title}`;
+    if (!filmDayMap.has(id)) filmDayMap.set(id, []);
+    filmDayMap.get(id).push(m);
+  }
+  const mergedMatches = [];
+  const seenFilmDay = new Set();
+  for (const m of matches) {
+    const id = `${m.ev.theater}__${m.ev.date}__${m.ss.title}`;
+    if (seenFilmDay.has(id)) continue;
+    seenFilmDay.add(id);
+    const group = filmDayMap.get(id);
+    if (group.length > 1) {
+      // Merge all times from repeat screenings into the first entry
+      const allTimes = [...new Set(group.flatMap(g => g.ev.times || []))].sort();
+      mergedMatches.push({ ev: { ...group[0].ev, times: allTimes }, ss: group[0].ss });
+    } else {
+      mergedMatches.push(m);
+    }
+  }
+  // Second pass: detect double bills (same theater+date+times, different SS films)
+  const slotMap2 = new Map();
+  for (const m of mergedMatches) {
+    const timeKey = (m.ev.times || []).slice().sort().join('|');
+    const key = `${m.ev.theater}__${m.ev.date}__${timeKey}`;
+    if (!slotMap2.has(key)) slotMap2.set(key, []);
+    slotMap2.get(key).push(m);
+  }
   const used = new Set();
   const out = [];
-  for (const m of matches) {
+  for (const m of mergedMatches) {
     const id = `${m.ev.theater}__${m.ev.date}__${m.ss.title}`;
     if (used.has(id)) continue;
     const timeKey = (m.ev.times || []).slice().sort().join('|');
     const slotKey = `${m.ev.theater}__${m.ev.date}__${timeKey}`;
-    const slot = slotMap.get(slotKey) || [];
+    const slot = slotMap2.get(slotKey) || [];
     if (slot.length > 1 && timeKey !== '') {
       // Multiple SS films in same time slot = double bill — merge into one entry
       const sorted = [...slot].sort((a, b) => a.ss.rank - b.ss.rank);
@@ -348,25 +379,18 @@ function renderTheaterNav() {
   if (!scraperLoaded) {
     nav.innerHTML = `<div class="nav-loading">
       <svg class="reel-spinner" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <!-- Outer ring -->
-        <circle cx="40" cy="40" r="37" fill="none" stroke="currentColor" stroke-width="3"/>
-        <!-- Inner hub ring -->
-        <circle cx="40" cy="40" r="10" fill="none" stroke="currentColor" stroke-width="2.5"/>
-        <!-- Center hole -->
-        <circle cx="40" cy="40" r="4" fill="currentColor"/>
-        <!-- 3 spokes -->
-        <line x1="40" y1="14" x2="40" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        <line x1="14.1" y1="55" x2="20.4" y2="46.1" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        <line x1="65.9" y1="55" x2="59.6" y2="46.1" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        <!-- 8 sprocket holes evenly around inner ring at r=24 -->
-        <circle cx="40"    cy="16"    r="3.2" fill="var(--bg)"/>
-        <circle cx="56.97" cy="23.03" r="3.2" fill="var(--bg)"/>
-        <circle cx="64"    cy="40"    r="3.2" fill="var(--bg)"/>
-        <circle cx="56.97" cy="56.97" r="3.2" fill="var(--bg)"/>
-        <circle cx="40"    cy="64"    r="3.2" fill="var(--bg)"/>
-        <circle cx="23.03" cy="56.97" r="3.2" fill="var(--bg)"/>
-        <circle cx="16"    cy="40"    r="3.2" fill="var(--bg)"/>
-        <circle cx="23.03" cy="23.03" r="3.2" fill="var(--bg)"/>
+        <!-- Disk body -->
+        <circle cx="40" cy="40" r="36" fill="currentColor"/>
+        <!-- Three large oval openings (split-reel windows) -->
+        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)"/>
+        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)" transform="rotate(120 40 40)"/>
+        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)" transform="rotate(240 40 40)"/>
+        <!-- Hub cutout -->
+        <circle cx="40" cy="40" r="10.5" fill="var(--bg)"/>
+        <!-- Hub collar ring -->
+        <circle cx="40" cy="40" r="10.5" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        <!-- Centre spindle -->
+        <circle cx="40" cy="40" r="4.5" fill="currentColor"/>
       </svg>
       <span id="reel-spinner-text">Loading schedules…</span>
     </div>`;
