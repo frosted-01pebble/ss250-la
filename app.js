@@ -391,18 +391,24 @@ function renderTheaterNav() {
   if (!scraperLoaded) {
     nav.innerHTML = `<div class="nav-loading">
       <svg class="reel-spinner" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-        <!-- Disk body -->
-        <circle cx="40" cy="40" r="36" fill="currentColor"/>
-        <!-- Three large oval openings (split-reel windows) -->
-        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)"/>
-        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)" transform="rotate(120 40 40)"/>
-        <ellipse cx="40" cy="17" rx="6.5" ry="11.5" fill="var(--bg)" transform="rotate(240 40 40)"/>
-        <!-- Hub cutout -->
-        <circle cx="40" cy="40" r="10.5" fill="var(--bg)"/>
-        <!-- Hub collar ring -->
-        <circle cx="40" cy="40" r="10.5" fill="none" stroke="currentColor" stroke-width="2.5"/>
-        <!-- Centre spindle -->
-        <circle cx="40" cy="40" r="4.5" fill="currentColor"/>
+        <!-- Outer rim -->
+        <path d="M 39.0 4.0 C 61.0 3.0, 77.0 20.0, 77.0 41.0 C 77.0 61.0, 59.0 77.0, 40.0 77.0 C 19.0 77.0, 3.0 60.0, 3.0 40.0 C 3.0 19.0, 21.0 3.0, 39.0 4.0 Z" fill="currentColor"/>
+        <!-- Inner shadow ring -->
+        <path d="M 40.0 6.5 C 59.0 6.0, 74.0 21.0, 73.5 41.0 C 73.0 60.0, 59.0 74.0, 40.0 73.5 C 21.0 74.0, 6.0 59.5, 6.5 40.0 C 7.0 21.0, 22.0 7.0, 40.0 6.5 Z" fill="var(--surface2)"/>
+        <!-- Reel body -->
+        <path d="M 40.5 9.0 C 58.0 9.0, 72.0 23.0, 71.5 40.5 C 71.0 58.0, 58.0 72.0, 40.0 71.5 C 22.0 72.0, 8.0 57.5, 8.5 39.5 C 9.0 22.0, 23.0 8.5, 40.5 9.0 Z" fill="var(--bg)"/>
+        <!-- Film windows -->
+        <path d="M 39.5 12.5 C 45.0 12.0, 49.0 16.5, 48.5 21.5 C 48.0 26.5, 44.0 30.0, 39.5 29.5 C 35.0 29.0, 31.0 25.0, 31.5 21.0 C 32.0 17.0, 35.5 13.0, 39.5 12.5 Z" fill="var(--surface)"/>
+        <path d="M 59.0 25.5 C 64.0 25.0, 68.0 29.5, 67.5 34.5 C 67.0 39.5, 63.0 43.0, 58.5 42.5 C 54.0 42.0, 50.0 38.0, 50.5 33.5 C 51.0 29.0, 55.0 25.5, 59.0 25.5 Z" fill="var(--surface)"/>
+        <path d="M 52.0 47.5 C 56.5 47.0, 60.5 51.0, 60.0 56.0 C 59.5 61.0, 55.5 65.0, 51.5 65.0 C 47.0 65.0, 43.0 61.0, 43.5 56.5 C 44.0 52.0, 48.0 48.0, 52.0 47.5 Z" fill="var(--surface)"/>
+        <path d="M 27.5 48.0 C 32.5 47.5, 36.5 51.5, 37.0 56.0 C 37.5 61.0, 33.0 65.0, 28.5 65.0 C 24.0 65.0, 19.5 61.5, 20.0 57.0 C 20.5 52.5, 23.5 48.5, 27.5 48.0 Z" fill="var(--surface)"/>
+        <path d="M 21.0 25.5 C 26.0 25.0, 29.5 29.0, 29.5 33.5 C 29.5 38.5, 26.0 43.0, 21.0 43.0 C 16.5 43.0, 12.0 39.0, 12.5 34.0 C 13.0 29.5, 16.5 25.5, 21.0 25.5 Z" fill="var(--surface)"/>
+        <!-- Centre hub -->
+        <path d="M 40.0 34.5 C 43.0 34.0, 45.5 37.0, 45.5 40.0 C 45.5 43.5, 43.0 46.0, 40.0 45.5 C 37.0 45.5, 34.5 43.0, 34.5 40.0 C 34.5 37.0, 37.5 34.5, 40.0 34.5 Z" fill="var(--bg)"/>
+        <!-- Spindle -->
+        <path d="M 40.0 37.5 C 41.5 37.5, 42.5 38.5, 42.5 40.0 C 42.5 41.5, 41.5 42.5, 40.0 42.5 C 38.5 42.5, 37.5 41.5, 37.5 40.0 C 37.5 38.5, 38.5 37.5, 40.0 37.5 Z" fill="currentColor"/>
+        <!-- Centre dot -->
+        <path d="M 40.0 38.8 C 40.7 38.8, 41.2 39.3, 41.2 40.0 C 41.2 40.7, 40.7 41.2, 40.0 41.2 C 39.3 41.2, 38.8 40.7, 38.8 40.0 C 38.8 39.3, 39.3 38.8, 40.0 38.8 Z" fill="var(--bg)"/>
       </svg>
       <span id="reel-spinner-text">Loading schedules…</span>
     </div>`;
