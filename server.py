@@ -99,6 +99,8 @@ def _build_cache():
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
         ('alamo',                fetch_alamo_events),
+        ('oldtownmusichall',     fetch_oldtownmusichall_events),
+        ('culver',               fetch_culver_events),
     ]
 
     _loading_progress = {'status': 'loading', 'done': 0, 'total': len(scrapers)}
@@ -1176,6 +1178,148 @@ def fetch_alamo_events():
             'source':  'alamo',
         })
 
+    return events
+
+
+def fetch_oldtownmusichall_events():
+    """Old Town Music Hall (El Segundo) — scrape /all-shows + per-film pages."""
+    base = 'https://tickets.oldtownmusichall.org'
+    today = date.today()
+
+    r = requests.get(f'{base}/all-shows', headers=HEADERS, timeout=20)
+    slugs = list(dict.fromkeys(re.findall(r'/movie/([a-z0-9-]+)', r.text)))
+    if not slugs:
+        return []
+
+    def _fetch_film(slug):
+        try:
+            fr = requests.get(f'{base}/movie/{slug}', headers=HEADERS, timeout=20)
+        except Exception:
+            return []
+
+        # Poster from og:image
+        pm = re.search(r'property="og:image"\s+content="([^"]+)"', fr.text)
+        poster = pm.group(1) if pm else None
+
+        # Title from og:title (falls back to humanising the slug)
+        tm = re.search(r'property="og:title"\s+content="([^"]+)"', fr.text)
+        title = tm.group(1) if tm else slug.replace('-', ' ').title()
+
+        # Format from meta description
+        fmt = ''
+        dm = re.search(r'name="description"\s+content="([^"]+)"', fr.text)
+        if dm:
+            desc = dm.group(1)
+            if re.search(r'\b35mm\b', desc, re.I):   fmt = '35mm'
+            elif re.search(r'\b70mm\b', desc, re.I): fmt = '70mm'
+            elif re.search(r'\b16mm\b', desc, re.I): fmt = '16mm'
+            elif re.search(r'\bDCP\b',  desc, re.I): fmt = 'DCP'
+            elif re.search(r'\bsilent\b', desc, re.I): fmt = 'Silent'
+
+        # Showtimes: "March 28, 2:30 pm" in checkout href text
+        showtime_pairs = re.findall(
+            r'href="([^"]*checkout/showing/[^"]+)"[^>]*>\s*([^<]+?)\s*</a>',
+            fr.text
+        )
+        events = []
+        for link_url, time_text in showtime_pairs:
+            m = re.match(r'(\w+ \d+),\s*(\d+:\d+\s*[ap]m)', time_text.strip(), re.I)
+            if not m:
+                continue
+            date_part, time_part = m.group(1), m.group(2)
+            try:
+                d = datetime.strptime(f'{date_part} {today.year}', '%B %d %Y').date()
+                if d < today:
+                    d = datetime.strptime(f'{date_part} {today.year + 1}', '%B %d %Y').date()
+            except ValueError:
+                continue
+            if d < today:
+                continue
+            full_url = link_url if link_url.startswith('http') else base + link_url
+            events.append({
+                'theater': 'Old Town Music Hall',
+                'title':   title,
+                'date':    d.strftime('%Y-%m-%d'),
+                'times':   [time_part.strip().upper()],
+                'format':  fmt,
+                'url':     full_url,
+                'poster':  poster,
+                'source':  'oldtownmusichall',
+            })
+        return events
+
+    all_events = []
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for result in as_completed([ex.submit(_fetch_film, s) for s in slugs]):
+            all_events.extend(result.result() or [])
+    return all_events
+
+
+# Known event-series prefixes at The Culver Theater — strip to get bare film title
+_CULVER_PREFIXES = (
+    'Sunday Matinee: ', 'Movie-Mad Mondays: ', 'Hellraisers Film Club Presents: ',
+    'From Culver with Love: ', 'Alula FF: ', 'FanMail Cinema Club Presents: ',
+    'Rewind or Die: ', 'Hellraisers: ', 'From Culver With Love: ',
+)
+
+def fetch_culver_events():
+    """The Culver Theater (Culver City) — scraped via RevivalHouses.com.
+    The theater's own site (web.theculvertheater.com) blocks server-side access
+    via Cloudflare WAF; RevivalHouses aggregates their classic/specialty listings."""
+    today = date.today()
+    today_str = today.strftime('%Y-%m-%d')
+
+    r = requests.get(
+        'https://www.revivalhouses.com/theaters/the-culver-theater/',
+        headers=HEADERS, timeout=20
+    )
+
+    pattern = re.compile(
+        r'<img[^>]+src="([^"]+)"[^>]*>.*?'
+        r'<cite>([^<]+)</cite>.*?'
+        r'Movie__time--date\">([^<]+)</p>.*?'
+        r'<time>([^<]+)</time>.*?'
+        r'href="(https://web\.theculvertheater[^"]+)"',
+        re.DOTALL
+    )
+
+    events = []
+    for m in pattern.finditer(r.text):
+        raw_poster, raw_title, raw_date, raw_time, url = m.groups()
+
+        # Strip series prefix to get bare film title
+        title = raw_title.strip()
+        for prefix in _CULVER_PREFIXES:
+            if title.startswith(prefix):
+                title = title[len(prefix):].strip()
+                break
+
+        # Parse "Sun, Mar 29" → YYYY-MM-DD
+        dm = re.match(r'\w+,\s*(\w+ \d+)', raw_date.strip())
+        if not dm:
+            continue
+        try:
+            d = datetime.strptime(f'{dm.group(1)} {today.year}', '%b %d %Y').date()
+            if d < today:
+                d = datetime.strptime(f'{dm.group(1)} {today.year + 1}', '%b %d %Y').date()
+        except ValueError:
+            continue
+        if d.strftime('%Y-%m-%d') < today_str:
+            continue
+
+        # Only keep TMDB poster URLs (skip local RevivalHouses placeholders)
+        poster = raw_poster.strip() if raw_poster.startswith('https://image.tmdb.org') else None
+
+        events.append({
+            'theater': 'The Culver Theater',
+            'title':   title,
+            'date':    d.strftime('%Y-%m-%d'),
+            'times':   [raw_time.strip().upper()],
+            'format':  '',
+            'url':     url,
+            'poster':  poster,
+            'source':  'culver',
+        })
     return events
 
 
