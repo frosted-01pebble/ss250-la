@@ -1157,7 +1157,7 @@ def fetch_alamo_events():
 
 TMDB_KEY = os.environ.get('TMDB_API_KEY', '8054ed3692dfed2068f4c209e12148a2')
 _ss250_cache = {'data': None, 'fetched_at': 0}
-SS250_CACHE_TTL = 86400  # 24 hours
+SS250_CACHE_TTL = 86400 * 7  # 7 days
 
 def _load_ss250_from_js():
     try:
@@ -1359,12 +1359,25 @@ def _build_ss250_cache():
     films = _load_ss250_from_js()
     if not films:
         return
+    # Keep old cache as fallback so rate-limited fetches don't wipe good data
+    old_cache = {f['title']: f for f in (_ss250_cache.get('data') or _load_ss250_from_disk() or [])}
     enriched = [None] * len(films)
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         futures = {ex.submit(_fetch_one_poster, f): i for i, f in enumerate(films)}
         for fut in as_completed(futures):
             enriched[futures[fut]] = fut.result()
-    data = [f for f in enriched if f]
+    data = []
+    for f in enriched:
+        if not f:
+            continue
+        # If this rebuild lost a poster/director that the old cache had, keep the old values
+        old = old_cache.get(f['title'])
+        if old:
+            if not f.get('poster') and old.get('poster'):
+                f = {**f, 'poster': old['poster']}
+            if not f.get('director') and old.get('director'):
+                f = {**f, 'director': old['director'], 'countries': old.get('countries', [])}
+        data.append(f)
     _ss250_cache['data'] = data
     _ss250_cache['fetched_at'] = time.time()
     _save_ss250_to_disk(data)
