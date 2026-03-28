@@ -364,7 +364,7 @@ function renderTheaterNav() {
         ${dropdownLabel} ▾
       </button>
       <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
-        ${LA_THEATERS.map(t => `
+        ${[...LA_THEATERS].sort((a, b) => a.name.localeCompare(b.name)).map(t => `
           <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
             ${escHtml(t.name)}
           </button>`).join('')}
