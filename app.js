@@ -272,7 +272,7 @@ function renderSS250Grid() {
       </a>
       <div class="ss250-card-info">
         <div class="ss250-card-title"><em>${escHtml(f.title)}</em></div>
-        ${f.director ? `<div class="ss250-card-director">Directed by ${escHtml(f.director)}</div>` : ''}
+        ${f.director ? `<div class="ss250-card-director">Dir. ${escHtml(f.director)}</div>` : ''}
         <div class="ss250-card-meta">
           <span class="ss250-card-year">${f.year}</span>
           ${f.countries && f.countries.length ? `<span class="ss250-card-countries">${escHtml(f.countries.join(', '))}</span>` : ''}
