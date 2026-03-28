@@ -9,6 +9,8 @@ const LA_THEATERS = [
     url: "https://studios.wearebraindead.com",
     scheduleUrl: "https://studios.wearebraindead.com",
     searchUrl: (title, date) => `https://studios.wearebraindead.com`,
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",
   },
   {
     name: "Academy Museum",
@@ -20,6 +22,8 @@ const LA_THEATERS = [
     url: "https://www.academymuseum.org/en/calendar",
     scheduleUrl: "https://www.academymuseum.org/en/calendar",
     searchUrl: (title, date) => `https://www.academymuseum.org/en/calendar`,
+    fontFamily: "'Space Mono', monospace",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap",
   },
   {
     name: "New Beverly Cinema",
@@ -31,6 +35,8 @@ const LA_THEATERS = [
     url: "https://www.thenewbev.com/",
     scheduleUrl: "https://www.thenewbev.com/",
     searchUrl: (title, date) => `https://www.thenewbev.com/`,
+    fontFamily: "'Playfair Display', serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap",
   },
   {
     name: "Egyptian Theatre",
@@ -42,6 +48,8 @@ const LA_THEATERS = [
     url: "https://www.americancinematheque.com/egyptian-theatre/",
     scheduleUrl: "https://www.americancinematheque.com/now-showing/",
     searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap",
   },
   {
     name: "Aero Theatre",
@@ -53,6 +61,8 @@ const LA_THEATERS = [
     url: "https://www.americancinematheque.com/aero-theatre/",
     scheduleUrl: "https://www.americancinematheque.com/now-showing/",
     searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap",
   },
   {
     name: "Los Feliz 3",
@@ -64,6 +74,8 @@ const LA_THEATERS = [
     url: "https://www.americancinematheque.com/los-feliz-theatre/",
     scheduleUrl: "https://www.americancinematheque.com/now-showing/",
     searchUrl: (title, date) => `https://www.americancinematheque.com/now-showing/`,
+    fontFamily: "'Cormorant Garamond', serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap",
   },
   {
     name: "Landmark Nuart Theatre",
@@ -76,6 +88,8 @@ const LA_THEATERS = [
     scheduleUrl: "https://www.landmarktheatres.com/los-angeles/nuart-theatre",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Landmark Nuart Theatre')}`,
+    fontFamily: "'Nunito', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&display=swap",
   },
   {
     name: "Vista Theatre",
@@ -88,6 +102,8 @@ const LA_THEATERS = [
     scheduleUrl: "https://www.vintagecinemas.com/vista/",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Vista Theatre Los Feliz')}`,
+    fontFamily: "'Cinzel', serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap",
   },
   {
     name: "Billy Wilder Theatre",
@@ -99,6 +115,8 @@ const LA_THEATERS = [
     url: "https://www.cinema.ucla.edu/events",
     scheduleUrl: "https://www.cinema.ucla.edu/events",
     searchUrl: (title, date) => `https://www.cinema.ucla.edu/events`,
+    fontFamily: "'Roboto', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap",
   },
   {
     name: "Gardena Cinema",
@@ -111,6 +129,8 @@ const LA_THEATERS = [
     scheduleUrl: "https://ticketing.uswest.veezi.com/sessions/?siteToken=he5nsxynkgmw2w1wvfey3mvh64",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Gardena Cinema')}`,
+    fontFamily: "'Big Shoulders Display', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700&display=swap",
   },
   {
     name: "Vidiots",
@@ -124,6 +144,8 @@ const LA_THEATERS = [
     scheduleUrl: "https://vidiotsfoundation.org/coming-soon/",
     searchUrl: (title, date) =>
       `https://www.google.com/search?q=${encodeURIComponent(title + ' showtimes Vidiots Eagle Rock')}`,
+    fontFamily: "'Manrope', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&display=swap",
   },
   {
     name: "Alamo Drafthouse DTLA",
@@ -135,5 +157,7 @@ const LA_THEATERS = [
     url: "https://drafthouse.com/los-angeles",
     scheduleUrl: "https://drafthouse.com/los-angeles",
     searchUrl: (title, date) => `https://drafthouse.com/los-angeles`,
+    fontFamily: "'Jost', sans-serif",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Jost:wght@700&display=swap",
   },
 ];

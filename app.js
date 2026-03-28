@@ -629,10 +629,23 @@ function renderTheaterDetail() {
   const matches = getUpcomingSSForTheater(selectedTheater);
   const typeLabel = { repertory: 'Repertory', arthouse: 'Arthouse', mainstream: 'Mainstream' }[theater.type] || '';
 
+  // Load theater font if specified
+  if (theater.fontUrl) {
+    const fontId = `gfont-${theater.name.replace(/\s+/g, '-')}`;
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement('link');
+      link.id = fontId;
+      link.rel = 'stylesheet';
+      link.href = theater.fontUrl;
+      document.head.appendChild(link);
+    }
+  }
+  const nameStyle = theater.fontFamily ? ` style="font-family:${theater.fontFamily}"` : '';
+
   const header = `
     <div class="detail-header">
       <div class="detail-header-left">
-        <div class="detail-theater-name">${escHtml(theater.name)}</div>
+        <div class="detail-theater-name"${nameStyle}>${escHtml(theater.name)}</div>
         <div class="detail-meta">
           ${escHtml(theater.neighborhood)}
           &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>
