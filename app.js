@@ -694,9 +694,10 @@ function renderTheaterDetail() {
   }
   const nameStyle = theater.fontFamily ? ` style="font-family:${theater.fontFamily}"` : '';
 
-  const tIdx = LA_THEATERS.findIndex(t => t.name === selectedTheater);
-  const prevTheater = LA_THEATERS[(tIdx - 1 + LA_THEATERS.length) % LA_THEATERS.length];
-  const nextTheater = LA_THEATERS[(tIdx + 1) % LA_THEATERS.length];
+  const sortedTheaters = [...LA_THEATERS].sort((a, b) => a.name.localeCompare(b.name));
+  const tIdx = sortedTheaters.findIndex(t => t.name === selectedTheater);
+  const prevTheater = sortedTheaters[(tIdx - 1 + sortedTheaters.length) % sortedTheaters.length];
+  const nextTheater = sortedTheaters[(tIdx + 1) % sortedTheaters.length];
 
   const header = `
     <div class="detail-header">
