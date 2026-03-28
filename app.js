@@ -170,14 +170,52 @@ function formatScreeningDate(dateStr) {
   return eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+// --- Double-bill deduplication ---
+// When the scraper returns separate events for each film in a double bill
+// (same theater, date, and times), merge them into one row showing both films.
+function mergeDoubleBills(matches) {
+  const slotMap = new Map();
+  for (const m of matches) {
+    const timeKey = (m.ev.times || []).slice().sort().join('|');
+    const key = `${m.ev.theater}__${m.ev.date}__${timeKey}`;
+    if (!slotMap.has(key)) slotMap.set(key, []);
+    slotMap.get(key).push(m);
+  }
+  const used = new Set();
+  const out = [];
+  for (const m of matches) {
+    const id = `${m.ev.theater}__${m.ev.date}__${m.ss.title}`;
+    if (used.has(id)) continue;
+    const timeKey = (m.ev.times || []).slice().sort().join('|');
+    const slotKey = `${m.ev.theater}__${m.ev.date}__${timeKey}`;
+    const slot = slotMap.get(slotKey) || [];
+    if (slot.length > 1 && timeKey !== '') {
+      // Multiple SS films in same time slot = double bill — merge into one entry
+      const sorted = [...slot].sort((a, b) => a.ss.rank - b.ss.rank);
+      for (const s of sorted) used.add(`${s.ev.theater}__${s.ev.date}__${s.ss.title}`);
+      const primary = sorted[0];
+      const partnerTitles = sorted.slice(1).map(s => s.ss.title).join(' / ');
+      out.push({
+        ev: { ...primary.ev, title: `${primary.ss.title} / ${partnerTitles}` },
+        ss: primary.ss,
+      });
+    } else {
+      used.add(id);
+      out.push(m);
+    }
+  }
+  return out;
+}
+
 // --- Scraper data ---
 function getUpcomingSSForTheater(theaterName) {
   const today = todayStr();
-  return scraperEvents
+  const matches = scraperEvents
     .filter(e => e.theater === theaterName && e.date >= today)
     .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
     .filter(({ ss }) => ss !== null)
     .sort((a, b) => a.ev.date.localeCompare(b.ev.date));
+  return mergeDoubleBills(matches);
 }
 
 function theatersWithMatches() {
@@ -306,7 +344,7 @@ function renderTheaterNav() {
         <circle cx="16"    cy="40"    r="3.2" fill="var(--bg)"/>
         <circle cx="23.03" cy="23.03" r="3.2" fill="var(--bg)"/>
       </svg>
-      Loading schedules…
+      <span id="reel-spinner-text">Loading schedules…</span>
     </div>`;
     nav.classList.remove('hidden');
     return;
@@ -528,11 +566,13 @@ function renderTheaterDetail() {
   if (selectedTheater === '__all__') {
     const today = todayStr();
     const _FILM_RE = /\b(16mm|35mm|70mm)\b/i;
-    const all = scraperEvents
-      .filter(e => e.date >= today && (!filmFilterActive || _FILM_RE.test(e.format || '')))
-      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
-      .filter(({ ss }) => ss !== null)
-      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank);
+    const all = mergeDoubleBills(
+      scraperEvents
+        .filter(e => e.date >= today && (!filmFilterActive || _FILM_RE.test(e.format || '')))
+        .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+        .filter(({ ss }) => ss !== null)
+        .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
+    );
 
     const metaText = filmFilterActive
       ? 'Every Sight &amp; Sound screening across LA playing on either 16mm, 35mm, or 70mm'
@@ -607,20 +647,35 @@ function renderTheaterDetail() {
 
 // --- Load scraper data ---
 async function loadScraperData() {
+  // Poll until the server cache is ready, updating the spinner with progress
+  while (true) {
+    try {
+      const res = await fetch('/api/loading-status', { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const status = await res.json();
+        if (status.total > 0) {
+          const el = document.getElementById('reel-spinner-text');
+          if (el) el.textContent = `Loading venues… ${status.done} / ${status.total}`;
+        }
+        if (status.ready) break;
+      }
+    } catch (e) { /* server not up yet, keep polling */ }
+    await new Promise(r => setTimeout(r, 1200));
+  }
+
   try {
-    const res = await fetch(SCRAPER_URL, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(SCRAPER_URL, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return;
     const data = await res.json();
     scraperEvents = data.events || [];
     scraperLoaded = true;
-    console.log(`Loaded ${scraperEvents.length} events from scraper backend`);
   } catch (e) {
     scraperLoaded = false;
-    console.log('Scraper backend not available');
   }
 }
 
 async function initPage() {
+  renderTheaterNav(); // show spinner immediately while polling
   await loadScraperData();
 
   selectedTheater = '__all__';

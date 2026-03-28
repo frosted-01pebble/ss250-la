@@ -20,6 +20,7 @@ CORS(app)
 # ── Cache ──────────────────────────────────────────────────────────────────────
 _cache = {'data': None, 'fetched_at': 0}
 CACHE_TTL = 3600  # refresh every hour
+_loading_progress = {'status': 'idle', 'done': 0, 'total': 0}
 
 _year_cache = {}  # title -> year int or None
 
@@ -69,9 +70,10 @@ def _enrich_double_features(events):
             ev['title'] = f' / '.join(enriched)
 
 def _build_cache():
+    global _loading_progress
     today_str = date.today().strftime('%Y-%m-%d')
-    results = {'events': [], 'errors': {}}
-    for key, fetcher in [
+
+    scrapers = [
         ('americancinematheque', fetch_ac_events),
         ('newbeverly',           fetch_newbev_events),
         ('vista',                fetch_vista_events),
@@ -82,15 +84,31 @@ def _build_cache():
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
         ('alamo',                fetch_alamo_events),
-    ]:
+    ]
+
+    _loading_progress = {'status': 'loading', 'done': 0, 'total': len(scrapers)}
+    results = {'events': [], 'errors': {}}
+    lock = threading.Lock()
+
+    def run_scraper(key, fetcher):
         try:
-            results['events'].extend(fetcher())
+            evs = fetcher()
+            with lock:
+                results['events'].extend(evs)
         except Exception as e:
-            results['errors'][key] = str(e)
+            with lock:
+                results['errors'][key] = str(e)
             traceback.print_exc()
+        finally:
+            with lock:
+                _loading_progress['done'] += 1
+
+    with ThreadPoolExecutor(max_workers=len(scrapers)) as ex:
+        futures = [ex.submit(run_scraper, key, fetcher) for key, fetcher in scrapers]
+        for f in as_completed(futures):
+            pass
 
     # Preserve today's events from the previous cache that the fresh fetch may have dropped.
-    # Venues sometimes remove same-day screenings from their API before the show starts.
     prev_data = _cache.get('data')
     if prev_data:
         new_keys = {(e['theater'], e['title'], e['date']) for e in results['events']}
@@ -101,6 +119,7 @@ def _build_cache():
     _enrich_double_features(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
+    _loading_progress['status'] = 'ready'
     print(f"Cache refreshed — {len(results['events'])} events, errors: {list(results['errors'].keys()) or 'none'}")
 
 def _refresh_loop():
@@ -671,45 +690,35 @@ def fetch_braindead_events():
 
 def _fetch_nuart_session_times(movie_url_map):
     """
-    Use Playwright to visit each Nuart movie page, click date buttons,
-    and capture schedule API responses (which only work from the browser context).
+    Use async Playwright to visit all Nuart movie pages IN PARALLEL, clicking
+    date buttons and capturing schedule API responses.
 
-    The schedule API returns:
-      { "X00CW": { "schedule": { movie_id: { date: [{ startsAt, ... }] } } }, ... }
-
-    Args:
-        movie_url_map: {str(movie_id): url}
-
-    Returns:
-        {(movie_id_str, date_str): [time_str, ...]}
+    Returns: {(movie_id_str, date_str): [time_str, ...]}
     """
+    import asyncio
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.async_api import async_playwright
     except ImportError:
         print("Nuart: playwright not installed — times will be empty")
         return {}
 
     result = {}
+    day_abbrevs = ['SAT', 'SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI']
 
-    def _parse_schedule_response(data):
-        """Extract (mid, date_str) -> [time_str] from a schedule API response dict."""
+    def _parse_response_data(data):
         if not isinstance(data, dict):
             return
-        # Theater-keyed format: {theater_id: {schedule: {movie_id: {date: [sessions]}}}}
-        for theater_id, theater_data in data.items():
+        for theater_data in data.values():
             if not isinstance(theater_data, dict):
                 continue
-            sched = theater_data.get('schedule') or {}
-            for mid, dates in sched.items():
+            for mid, dates in (theater_data.get('schedule') or {}).items():
                 if not isinstance(dates, dict):
                     continue
                 for d_str, sessions in dates.items():
                     if not isinstance(sessions, list):
                         continue
                     for session in sessions:
-                        if not isinstance(session, dict):
-                            continue
-                        if session.get('isExpired'):
+                        if not isinstance(session, dict) or session.get('isExpired'):
                             continue
                         starts_at = session.get('startsAt') or ''
                         if not starts_at:
@@ -717,62 +726,58 @@ def _fetch_nuart_session_times(movie_url_map):
                         try:
                             dt = datetime.fromisoformat(starts_at)
                             h = dt.hour % 12 or 12
-                            ampm = 'AM' if dt.hour < 12 else 'PM'
-                            t_str = f"{h}:{dt.strftime('%M')} {ampm}"
+                            t_str = f"{h}:{dt.strftime('%M')} {'AM' if dt.hour < 12 else 'PM'}"
                         except Exception:
                             t_str = starts_at[11:16]
                         key = (str(mid), d_str)
-                        if key not in result:
-                            result[key] = []
+                        result.setdefault(key, [])
                         if t_str not in result[key]:
                             result[key].append(t_str)
 
-    def handle_response(response):
-        if 'gatsby-source-boxofficeapi/schedule' not in response.url:
-            return
-        if response.status != 200:
-            return
+    async def fetch_one(context, mid, url):
+        page = await context.new_page()
+        async def on_response(response):
+            if 'gatsby-source-boxofficeapi/schedule' not in response.url or response.status != 200:
+                return
+            try:
+                _parse_response_data(await response.json())
+            except Exception:
+                pass
+        page.on('response', on_response)
         try:
-            _parse_schedule_response(response.json())
-        except Exception:
-            pass
+            await page.goto(url, wait_until='domcontentloaded', timeout=25000)
+            await page.wait_for_timeout(1500)
+            try:
+                accept = page.locator('button:has-text("Accept and Continue")')
+                if await accept.count() > 0:
+                    await accept.first.click(timeout=2000)
+                    await page.wait_for_timeout(500)
+            except Exception:
+                pass
+            for btn in await page.locator('button:enabled').all():
+                try:
+                    if any(d in (await btn.inner_text()).strip().upper() for d in day_abbrevs):
+                        await btn.click(timeout=2000)
+                        await page.wait_for_timeout(800)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Nuart playwright error for {url}: {e}")
+        finally:
+            await page.close()
 
-    day_abbrevs = ['SAT', 'SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI']
+    async def run_all():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent=HEADERS['User-Agent'])
+            await asyncio.gather(*[fetch_one(context, mid, url)
+                                   for mid, url in movie_url_map.items()])
+            await browser.close()
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(user_agent=HEADERS['User-Agent'])
-            page = context.new_page()
-            page.on('response', handle_response)
-
-            for mid, url in movie_url_map.items():
-                try:
-                    page.goto(url, wait_until='domcontentloaded', timeout=30000)
-                    page.wait_for_timeout(2000)
-                    # Dismiss cookie consent popup if present
-                    try:
-                        accept = page.locator('button:has-text("Accept and Continue")')
-                        if accept.count() > 0:
-                            accept.first.click(timeout=3000)
-                            page.wait_for_timeout(800)
-                    except Exception:
-                        pass
-                    # Click all enabled date buttons to trigger schedule API calls
-                    for btn in page.locator('button:enabled').all():
-                        try:
-                            txt = btn.inner_text().strip().upper()
-                            if any(d in txt for d in day_abbrevs):
-                                btn.click(timeout=3000)
-                                page.wait_for_timeout(1200)
-                        except Exception:
-                            pass
-                except Exception as e:
-                    print(f"Nuart playwright error for {url}: {e}")
-
-            browser.close()
+        asyncio.run(run_all())
     except Exception as e:
-        print(f"Nuart playwright session failed: {e}")
+        print(f"Nuart async playwright failed: {e}")
 
     print(f"Nuart: fetched times for {len(result)} (movie, date) pairs")
     return result
@@ -1299,12 +1304,17 @@ def _build_ss250_cache():
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@app.route('/api/loading-status')
+def loading_status():
+    return jsonify({
+        'ready': _cache['data'] is not None,
+        'done':  _loading_progress['done'],
+        'total': _loading_progress['total'],
+    })
+
 @app.route('/api/showtimes')
 def showtimes():
-    if _cache['data'] is None:
-        # Cache not ready yet — build synchronously on first hit
-        _build_cache()
-    return jsonify(_cache['data'])
+    return jsonify(_cache['data'] or {'events': [], 'errors': {}})
 
 @app.route('/api/ss250')
 def ss250_api():

@@ -118,7 +118,8 @@
       "Bash(curl -s \"https://api.themoviedb.org/3/movie/43878/images?api_key=$TMDB_KEY\")",
       "Bash(curl -s \"https://api.themoviedb.org/3/movie/43878/external_ids?api_key=$TMDB_KEY\")",
       "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\).get\\(''''imdb_id''''\\)\\)\")",
-      "Bash(TMDB_KEY=\"8054ed3692dfed2068f4c209e12148a2\" curl -s \"https://api.themoviedb.org/3/movie/30017?api_key=$TMDB_KEY\")"
+      "Bash(TMDB_KEY=\"8054ed3692dfed2068f4c209e12148a2\" curl -s \"https://api.themoviedb.org/3/movie/30017?api_key=$TMDB_KEY\")",
+      "Bash(curl -s http://localhost:5001/api/loading-status)"
     ]
   }
 }
