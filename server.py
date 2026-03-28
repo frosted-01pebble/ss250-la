@@ -69,6 +69,7 @@ def _enrich_double_features(events):
             ev['title'] = f' / '.join(enriched)
 
 def _build_cache():
+    today_str = date.today().strftime('%Y-%m-%d')
     results = {'events': [], 'errors': {}}
     for key, fetcher in [
         ('americancinematheque', fetch_ac_events),
@@ -87,6 +88,16 @@ def _build_cache():
         except Exception as e:
             results['errors'][key] = str(e)
             traceback.print_exc()
+
+    # Preserve today's events from the previous cache that the fresh fetch may have dropped.
+    # Venues sometimes remove same-day screenings from their API before the show starts.
+    prev_data = _cache.get('data')
+    if prev_data:
+        new_keys = {(e['theater'], e['title'], e['date']) for e in results['events']}
+        for ev in prev_data.get('events', []):
+            if ev.get('date') == today_str and (ev['theater'], ev['title'], ev['date']) not in new_keys:
+                results['events'].append(ev)
+
     _enrich_double_features(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
