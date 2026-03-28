@@ -1311,7 +1311,7 @@ def fetch_culver_events():
         poster = raw_poster.strip() if raw_poster.startswith('https://image.tmdb.org') else None
 
         events.append({
-            'theater': 'The Culver Theater',
+            'theater': 'Culver Theater',
             'title':   title,
             'date':    d.strftime('%Y-%m-%d'),
             'times':   [raw_time.strip().upper()],

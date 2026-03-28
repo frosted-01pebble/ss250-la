@@ -13,7 +13,7 @@ const LA_THEATERS = [
     fontUrl: "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",
   },
   {
-    name: "The Culver Theater",
+    name: "Culver Theater",
     neighborhood: "Culver City",
     type: "mainstream",
     note: "Classic screenings alongside new releases — Movie-Mad Mondays & Sunday Matinees",
