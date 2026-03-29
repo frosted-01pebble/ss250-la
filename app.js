@@ -679,8 +679,9 @@ function renderTheaterDetail() {
     return;
   }
 
-  // Theater filter: show filtered All Upcoming, no separate page
-  if (!LA_THEATERS.find(t => t.name === selectedTheater)) { detail.classList.add('hidden'); return; }
+  // Theater filter: show filtered list with theater info
+  const theater = LA_THEATERS.find(t => t.name === selectedTheater);
+  if (!theater) { detail.classList.add('hidden'); return; }
 
   const today = todayStr();
   const all = mergeDoubleBills(
@@ -691,13 +692,33 @@ function renderTheaterDetail() {
       .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
   );
 
+  const typeLabel = { repertory: 'Repertory', arthouse: 'Arthouse', mainstream: 'First Run' }[theater.type] || '';
+  const nameStyle = theater.fontFamily ? ` style="font-family:${theater.fontFamily}"` : '';
+  if (theater.fontUrl) {
+    const fontId = `gfont-${theater.name.replace(/\s+/g, '-')}`;
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement('link');
+      link.id = fontId; link.rel = 'stylesheet'; link.href = theater.fontUrl;
+      document.head.appendChild(link);
+    }
+  }
+
   const header = `
     <div class="detail-header">
       <div class="detail-header-left">
         <div class="detail-title-row">
-          <div class="detail-theater-name">${escHtml(selectedTheater)}</div>
+          <div class="detail-theater-name"${nameStyle}>${escHtml(theater.name)}</div>
         </div>
-        <div class="detail-meta">Upcoming Sight &amp; Sound screenings</div>
+        <div class="detail-meta">
+          ${escHtml(theater.neighborhood)}
+          ${typeLabel ? `&nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>` : ''}
+          ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">${theater.openedLabel || 'Est.'} ${theater.opened}</span>` : ''}
+        </div>
+        ${theater.conservancyUrl ? `<a class="conservancy-badge" href="${theater.conservancyUrl}" target="_blank" rel="noopener">&#9733; <span>Historic Designation by LA Conservancy</span></a>` : ''}
+        ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
+      </div>
+      <div class="detail-header-right">
+        <a class="detail-schedule-link" href="${typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
       </div>
     </div>`;
 

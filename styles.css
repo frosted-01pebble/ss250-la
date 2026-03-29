@@ -102,6 +102,24 @@ header h1 span { color: var(--accent); font-style: italic; }
 }
 .theater-dropdown-btn {
   min-width: 9rem;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-family: sans-serif;
+  letter-spacing: 0.02em;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.theater-dropdown-btn:hover { color: var(--text); border-color: var(--muted); }
+.theater-dropdown-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: bold;
 }
 .theater-dropdown-menu {
   position: absolute;
