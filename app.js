@@ -679,59 +679,31 @@ function renderTheaterDetail() {
     return;
   }
 
-  const theater = LA_THEATERS.find(t => t.name === selectedTheater);
-  if (!theater) { detail.classList.add('hidden'); return; }
+  // Theater filter: show filtered All Upcoming, no separate page
+  if (!LA_THEATERS.find(t => t.name === selectedTheater)) { detail.classList.add('hidden'); return; }
 
-  const matches = getUpcomingSSForTheater(selectedTheater);
-  const typeLabel = { repertory: 'Repertory', arthouse: 'Arthouse', mainstream: 'First Run' }[theater.type] || '';
-
-  // Load theater font if specified
-  if (theater.fontUrl) {
-    const fontId = `gfont-${theater.name.replace(/\s+/g, '-')}`;
-    if (!document.getElementById(fontId)) {
-      const link = document.createElement('link');
-      link.id = fontId;
-      link.rel = 'stylesheet';
-      link.href = theater.fontUrl;
-      document.head.appendChild(link);
-    }
-  }
-  const nameStyle = theater.fontFamily ? ` style="font-family:${theater.fontFamily}"` : '';
-
-  const sortedTheaters = [...LA_THEATERS].sort((a, b) => a.name.localeCompare(b.name));
-  const tIdx = sortedTheaters.findIndex(t => t.name === selectedTheater);
-  const prevTheater = sortedTheaters[(tIdx - 1 + sortedTheaters.length) % sortedTheaters.length];
-  const nextTheater = sortedTheaters[(tIdx + 1) % sortedTheaters.length];
+  const today = todayStr();
+  const all = mergeDoubleBills(
+    scraperEvents
+      .filter(e => e.theater === selectedTheater && e.date >= today)
+      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+      .filter(({ ss }) => ss !== null)
+      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
+  );
 
   const header = `
     <div class="detail-header">
       <div class="detail-header-left">
         <div class="detail-title-row">
-          <div class="detail-theater-name"${nameStyle}>${escHtml(theater.name)}</div>
+          <div class="detail-theater-name">${escHtml(selectedTheater)}</div>
         </div>
-        <div class="detail-meta">
-          ${escHtml(theater.neighborhood)}
-          &nbsp;·&nbsp;<span class="theater-type ${theater.type}">${typeLabel}</span>
-          ${theater.opened ? `&nbsp;·&nbsp;<span class="detail-opened">${theater.openedLabel || 'Est.'} ${theater.opened}</span>` : ''}
-        </div>
-        ${theater.conservancyUrl ? `<a class="conservancy-badge" href="${theater.conservancyUrl}" target="_blank" rel="noopener">&#9733; <span>Historic Designation by LA Conservancy</span></a>` : ''}
-        ${theater.history ? `<p class="detail-history">${escHtml(theater.history)}</p>` : ''}
-      </div>
-      <div class="detail-header-right">
-        <a class="detail-schedule-link" href="${typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
-        <div class="theater-nav-arrows">
-          <button class="theater-nav-arrow" title="${escHtml(prevTheater.name)}" onclick="selectedTheater='${escHtml(prevTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8249;</button>
-          <button class="theater-nav-arrow" title="${escHtml(nextTheater.name)}" onclick="selectedTheater='${escHtml(nextTheater.name)}';renderTheaterNav();renderTheaterDetail()">&#8250;</button>
-        </div>
+        <div class="detail-meta">Upcoming Sight &amp; Sound screenings</div>
       </div>
     </div>`;
 
-  if (matches.length === 0) {
-    detail.innerHTML = header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`;
-  } else {
-    detail.innerHTML = header + `<div class="screening-list">${buildScreeningRows(matches, false)}</div>`;
-  }
-
+  detail.innerHTML = all.length === 0
+    ? header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`
+    : header + `<div class="screening-list">${buildScreeningRowsList(all, true, true).join('')}</div>`;
   detail.classList.remove('hidden');
 }
 
