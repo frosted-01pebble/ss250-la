@@ -53,7 +53,7 @@ const SS250 = [
   { rank: 48,  title: "Wanda", year: 1970 },
   { rank: 50,  title: "The Piano", year: 1993 },
   { rank: 50,  title: "The 400 Blows", year: 1959 },
-  { rank: 52,  title: "Fear Eats the Soul", year: 1974 },
+  { rank: 52,  title: "Ali: Fear Eats the Soul", year: 1974 },
   { rank: 52,  title: "News from Home", year: 1977 },
   { rank: 54,  title: "Battleship Potemkin", year: 1925 },
   { rank: 54,  title: "Blade Runner", year: 1982 },

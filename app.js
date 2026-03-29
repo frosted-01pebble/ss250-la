@@ -52,7 +52,7 @@ const TITLE_ALIASES = {
   "bout de souffle":         ["breathless"],
   "close-up":                ["close up", "nema-ye nazdik"],
   "night of the hunter":     ["the night of the hunter"],
-  "fear eats the soul":      ["ali fear eats the soul", "angst essen seele auf"],
+  "ali fear eats the soul":  ["fear eats the soul", "angst essen seele auf"],
   "my neighbour totoro":     ["my neighbor totoro"],
 };
 
