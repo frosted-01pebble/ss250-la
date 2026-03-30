@@ -393,6 +393,10 @@ def fetch_newbev_events():
         title = re.sub(r'\s+', ' ', raw_title).strip()
         title = re.sub(r'\s*/\s*', ' / ', title)
 
+        # Default 35mm; override only if an explicit format is noted in the title
+        fmt_m = re.search(r'\b(70mm|16mm|DCP|digital|4K|IMAX)\b', title, re.IGNORECASE)
+        fmt = fmt_m.group(1) if fmt_m else '35mm'
+
         # Poster
         img = card.select_one('.event-card__img img')
         poster_url = img['src'] if img and img.get('src') else None
@@ -405,6 +409,7 @@ def fetch_newbev_events():
             'title':   title,
             'date':    parsed_date,
             'times':   times,
+            'format':  fmt,
             'url':     url,
             'poster':  poster_url,
             'source':  'newbeverly',
