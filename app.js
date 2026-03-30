@@ -53,6 +53,7 @@ const TITLE_ALIASES = {
   "close-up":                ["close up", "nema-ye nazdik"],
   "night of the hunter":     ["the night of the hunter"],
   "ali fear eats the soul":  ["fear eats the soul", "angst essen seele auf"],
+  "2001 a space odyssey":    ["2001"],
   "my neighbour totoro":     ["my neighbor totoro"],
 };
 

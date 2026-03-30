@@ -178,6 +178,17 @@ const LA_THEATERS = [
     fontUrl: "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap",
   },
   {
+    name: "Fine Arts Theatre",
+    neighborhood: "Beverly Hills",
+    type: "repertory",
+    note: "Vintage single-screen with regular 35mm & 70mm series programming",
+    opened: 1936,
+    history: "Built in 1936 on Wilshire Boulevard in Beverly Hills, the Fine Arts Theatre is one of the last surviving single-screen cinemas in the area. The theater has been lovingly maintained and is known for its Welles Wednesday series, recurring 70mm events, and themed double features spanning everything from classic Hollywood to sci-fi and animation.",
+    url: "https://www.fineartsbh.com",
+    scheduleUrl: "https://ticketing.uswest.veezi.com/sessions/?siteToken=tez3prscsvfbagchhkxbevjwk8",
+    searchUrl: (title, date) => `https://ticketing.uswest.veezi.com/sessions/?siteToken=tez3prscsvfbagchhkxbevjwk8`,
+  },
+  {
     name: "Alamo Drafthouse DTLA",
     neighborhood: "Downtown",
     type: "mainstream",

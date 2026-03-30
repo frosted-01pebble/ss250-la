@@ -96,6 +96,7 @@ def _build_cache():
         ('braindead',            fetch_braindead_events),
         ('nuart',                fetch_nuart_events),
         ('billywilder',          fetch_billywilder_events),
+        ('finearts',             fetch_fine_arts_events),
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
         ('alamo',                fetch_alamo_events),
@@ -965,7 +966,91 @@ def fetch_billywilder_events():
     return events
 
 
+_FA_SITETOKEN     = 'tez3prscsvfbagchhkxbevjwk8'
 _GARDENA_SITETOKEN = 'he5nsxynkgmw2w1wvfey3mvh64'
+
+def fetch_fine_arts_events():
+    """Fine Arts Theatre Beverly Hills — Veezi HTML sessions page.
+
+    Title conventions are inconsistent:
+      - "Wednesday with Welles VII/The Third Man"       → film after '/'
+      - "2001 (70mm)-2010 Double Feature (Digital)"     → film before '-NNN Double Feature'
+      - "Babylon 70mm"                                  → format suffix on plain title
+      - "The Godfather"                                 → no format → Digital (default)
+    """
+    url = f'{_VISTA_BASE}/sessions/?siteToken={_FA_SITETOKEN}'
+    r = requests.get(url, headers=HEADERS, timeout=20)
+    soup = BeautifulSoup(r.text, 'html.parser')
+
+    groups = {}
+
+    for date_div in soup.select('div#sessionsByDateConent div.date'):
+        date_h3 = date_div.select_one('h3.date-title')
+        if not date_h3:
+            continue
+        raw_date = date_h3.get_text(strip=True)
+        m = re.match(r'\w+\s+(\d+),\s+(\w+)', raw_date)
+        date_str = parse_date_str(f"{m.group(2)} {m.group(1)}") if m else None
+
+        for film_div in date_div.select('div.film'):
+            title_el = film_div.select_one('h3.title')
+            raw_title = title_el.get_text(strip=True) if title_el else ''
+
+            # Slash notation — keep only the film part after the last '/'
+            working = raw_title.split('/')[-1].strip() if '/' in raw_title else raw_title
+
+            # Detect format anywhere in the full raw title
+            fmt_m = re.search(r'\b(70mm|35mm|16mm)\b', raw_title, re.IGNORECASE)
+            fmt = fmt_m.group(1) if fmt_m else 'Digital'
+
+            # Detect "FILM1 (FMT1)-FILM2 Double Feature" to preserve both films
+            dash_df = re.match(
+                r'^(.+?)\s*(?:\([^)]*\))?\s*-\s*(.+?)\s+double feature',
+                working, re.IGNORECASE
+            )
+            if dash_df:
+                film1 = re.sub(r'\s*\([^)]*\)', '', dash_df.group(1)).strip()
+                film1 = re.sub(r'\s+\d+mm\s*$', '', film1, flags=re.IGNORECASE).strip()
+                film2 = re.sub(r'\s*\([^)]*\)', '', dash_df.group(2)).strip()
+                film2 = re.sub(r'\s+\d+mm\s*$', '', film2, flags=re.IGNORECASE).strip()
+                title = f'{film1} / {film2}'
+            else:
+                # Clean working title: strip parenthetical annotations and format suffix
+                title = re.sub(r'\s*\([^)]*\)', '', working).strip()
+                title = re.sub(r'\s+\d+mm\s*$', '', title, flags=re.IGNORECASE).strip()
+
+            img = film_div.select_one('img.poster')
+            poster = (_VISTA_BASE + img['src']) if img and img.get('src') else None
+
+            for li in film_div.select('ul.session-times li'):
+                time_el = li.select_one('time')
+                link_el = li.select_one('a[href]')
+                time_str = time_el.get_text(strip=True) if time_el else ''
+                sess_url = link_el['href'] if link_el else url
+
+                key = (title, date_str)
+                if key not in groups:
+                    groups[key] = {
+                        'title': title, 'date': date_str, 'fmt': fmt,
+                        'times': [], 'url': sess_url, 'poster': poster,
+                    }
+                if time_str and time_str not in groups[key]['times']:
+                    groups[key]['times'].append(time_str)
+
+    return [
+        {
+            'theater': 'Fine Arts Theatre',
+            'title':   g['title'],
+            'date':    g['date'],
+            'times':   g['times'],
+            'format':  g['fmt'],
+            'url':     g['url'],
+            'poster':  g.get('poster'),
+            'source':  'finearts',
+        }
+        for g in groups.values() if g['date']
+    ]
+
 
 def fetch_gardena_events():
     """Gardena Cinema — Veezi HTML sessions page (same structure as Vista)."""
