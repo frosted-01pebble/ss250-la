@@ -776,3 +776,15 @@ async function initPage() {
 }
 
 document.addEventListener('DOMContentLoaded', initPage);
+
+// Silently refresh scraper data every hour so an open tab stays current
+setInterval(async () => {
+  try {
+    const res = await fetch(SCRAPER_URL, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return;
+    const data = await res.json();
+    scraperEvents = data.events || [];
+    renderTheaterDetail();
+    if (currentApiKey) loadAndRender();
+  } catch (e) { /* ignore — stale data is fine */ }
+}, 60 * 60 * 1000); // every hour
