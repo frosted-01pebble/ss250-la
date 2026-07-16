@@ -657,12 +657,6 @@ footer {
   color: var(--muted); font-size: 0.78rem; font-family: sans-serif;
   border-top: 1px solid var(--border); margin-top: 3rem;
 }
-.footer-sampler {
-  font-size: 0.65rem;
-  color: #5a5040;
-  margin-top: 0.4rem;
-}
-
 /* ── Responsive ── */
 html, body { overflow-x: hidden; }
 
