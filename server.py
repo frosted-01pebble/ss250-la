@@ -100,12 +100,7 @@ def _build_cache():
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
         ('alamo',                fetch_alamo_events),
-        # 'oldtownmusichall' disabled — tickets.oldtownmusichall.org is dead at the
-        # TLS layer (server sends a bare "internal error" alert before any cert,
-        # confirmed with curl/openssl too — not client-specific). The venue has
-        # moved to a new JS-rendered platform (Indy Systems/Quasar) with no
-        # server-rendered showtimes; fetch_oldtownmusichall_events is left in
-        # place below for whenever that gets rebuilt against the new site.
+        ('oldtownmusichall',     fetch_oldtownmusichall_events),
         ('culver',               fetch_culver_events),
         ('laemmle',              fetch_laemmle_events),
     ]
@@ -1278,77 +1273,57 @@ def fetch_alamo_events():
 
 
 def fetch_oldtownmusichall_events():
-    """Old Town Music Hall (El Segundo) — scrape /all-shows + per-film pages."""
-    base = 'https://tickets.oldtownmusichall.org'
-    today = date.today()
+    """Old Town Music Hall (El Segundo) — GraphQL API behind their current site
+    (an "Indy Systems" cinema platform; the old tickets.oldtownmusichall.org
+    subdomain from a prior platform is dead). One request returns every
+    upcoming showing for the site; no session/cookies needed, just the
+    site-id/client-type headers the frontend itself sends."""
+    from datetime import timezone, timedelta as td
 
-    r = requests.get(f'{base}/all-shows', headers=HEADERS, timeout=20)
-    slugs = list(dict.fromkeys(re.findall(r'/movie/([a-z0-9-]+)', r.text)))
-    if not slugs:
+    query = ('query { showingsForDate(siteIds: [321]) { data { '
+             'id time movie { name urlSlug posterImage } } } }')
+    headers = {
+        **HEADERS,
+        'Content-Type': 'application/json',
+        'client-type': 'consumer',
+        'site-id': '321',
+    }
+    try:
+        r = requests.post('https://www.oldtownmusichall.org/graphql',
+                          json={'query': query}, headers=headers, timeout=20)
+        showings = r.json().get('data', {}).get('showingsForDate', {}).get('data', []) or []
+    except Exception:
         return []
 
-    def _fetch_film(slug):
-        try:
-            fr = requests.get(f'{base}/movie/{slug}', headers=HEADERS, timeout=20)
-        except Exception:
-            return []
+    events = []
+    for s in showings:
+        movie = s.get('movie') or {}
+        title = movie.get('name')
+        time_raw = s.get('time')
+        if not title or not time_raw:
+            continue
 
-        # Poster from og:image
-        pm = re.search(r'property="og:image"\s+content="([^"]+)"', fr.text)
-        poster = pm.group(1) if pm else None
+        dt_utc = datetime.fromisoformat(time_raw.replace('Z', '+00:00'))
+        offset = td(hours=-7) if 3 <= dt_utc.month <= 10 else td(hours=-8)
+        dt_local = dt_utc.astimezone(timezone(offset))
 
-        # Title from og:title (falls back to humanising the slug)
-        tm = re.search(r'property="og:title"\s+content="([^"]+)"', fr.text)
-        title = tm.group(1) if tm else slug.replace('-', ' ').title()
+        poster_id = movie.get('posterImage')
+        poster = f'https://indy-systems.imgix.net/{poster_id}?w=342' if poster_id else None
+        url_slug = movie.get('urlSlug')
+        url = (f'https://www.oldtownmusichall.org/movie/{url_slug}' if url_slug
+               else 'https://www.oldtownmusichall.org/all-programs/')
 
-        # Format from meta description
-        fmt = ''
-        dm = re.search(r'name="description"\s+content="([^"]+)"', fr.text)
-        if dm:
-            desc = dm.group(1)
-            if re.search(r'\b35mm\b', desc, re.I):   fmt = '35mm'
-            elif re.search(r'\b70mm\b', desc, re.I): fmt = '70mm'
-            elif re.search(r'\b16mm\b', desc, re.I): fmt = '16mm'
-            elif re.search(r'\bDCP\b',  desc, re.I): fmt = 'DCP'
-            elif re.search(r'\bsilent\b', desc, re.I): fmt = 'Silent'
-
-        # Showtimes: "March 28, 2:30 pm" in checkout href text
-        showtime_pairs = re.findall(
-            r'href="([^"]*checkout/showing/[^"]+)"[^>]*>\s*([^<]+?)\s*</a>',
-            fr.text
-        )
-        events = []
-        for link_url, time_text in showtime_pairs:
-            m = re.match(r'(\w+ \d+),\s*(\d+:\d+\s*[ap]m)', time_text.strip(), re.I)
-            if not m:
-                continue
-            date_part, time_part = m.group(1), m.group(2)
-            try:
-                d = datetime.strptime(f'{date_part} {today.year}', '%B %d %Y').date()
-                if d < today:
-                    d = datetime.strptime(f'{date_part} {today.year + 1}', '%B %d %Y').date()
-            except ValueError:
-                continue
-            if d < today:
-                continue
-            full_url = link_url if link_url.startswith('http') else base + link_url
-            events.append({
-                'theater': 'Old Town Music Hall',
-                'title':   title,
-                'date':    d.strftime('%Y-%m-%d'),
-                'times':   [time_part.strip().upper()],
-                'format':  fmt,
-                'url':     full_url,
-                'poster':  poster,
-                'source':  'oldtownmusichall',
-            })
-        return events
-
-    all_events = []
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        for result in as_completed([ex.submit(_fetch_film, s) for s in slugs]):
-            all_events.extend(result.result() or [])
-    return all_events
+        events.append({
+            'theater': 'Old Town Music Hall',
+            'title':   title,
+            'date':    dt_local.strftime('%Y-%m-%d'),
+            'times':   [dt_local.strftime('%-I:%M %p')],
+            'format':  '',
+            'url':     url,
+            'poster':  poster,
+            'source':  'oldtownmusichall',
+        })
+    return events
 
 
 # Known event-series prefixes at The Culver Theater — strip to get bare film title
