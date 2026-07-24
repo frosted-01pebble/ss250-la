@@ -152,6 +152,23 @@ header h1 span { color: var(--accent); font-style: italic; }
 .dropdown-item:hover { background: var(--surface); color: var(--text); }
 .dropdown-item.active { color: var(--accent); font-weight: bold; }
 
+.dropdown-group:last-child > .dropdown-group-header { border-bottom: none; }
+.dropdown-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.dropdown-group-arrow { color: var(--muted); font-size: 0.75em; }
+.dropdown-submenu {
+  background: var(--surface);
+}
+.dropdown-subitem {
+  padding-left: 1.75rem;
+  font-size: 0.78rem;
+}
+.dropdown-group:last-child .dropdown-subitem:last-child { border-bottom: none; }
+
 /* ── Theater detail panel ── */
 .theater-detail {
   max-width: 860px;

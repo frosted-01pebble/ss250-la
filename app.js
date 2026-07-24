@@ -5,6 +5,7 @@ let scraperEvents = [];
 let scraperLoaded = false;
 let selectedTheater = null;
 let filmFilterActive = false;
+let laemmleSubmenuOpen = false;
 let _groupIdCounter = 0;
 
 // --- Title normalization ---
@@ -420,15 +421,45 @@ function renderTheaterNav() {
   const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
+  const laemmleTheaters = LA_THEATERS.filter(t => t.name.startsWith('Laemmle'));
+  const otherTheaters   = LA_THEATERS.filter(t => !t.name.startsWith('Laemmle'));
+  const laemmleActive   = laemmleTheaters.some(t => t.name === selectedTheater);
+
+  // Build combined menu entries, sorting the Laemmle group by "Laemmles" so it
+  // lands alphabetically where the individual theaters used to.
+  const entries = [
+    ...otherTheaters.map(t => ({ type: 'theater', theater: t, sortKey: t.name })),
+    { type: 'laemmle-group', sortKey: 'Laemmles' },
+  ].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  const menuHtml = entries.map(entry => {
+    if (entry.type === 'theater') {
+      const t = entry.theater;
+      return `
+        <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
+          ${escHtml(t.name)}
+        </button>`;
+    }
+    return `
+      <div class="dropdown-group">
+        <button class="dropdown-item dropdown-group-header${laemmleActive ? ' active' : ''}" id="laemmle-group-btn">
+          The Laemmles <span class="dropdown-group-arrow">${laemmleSubmenuOpen ? '▾' : '▸'}</span>
+        </button>
+        <div class="dropdown-submenu${laemmleSubmenuOpen ? '' : ' hidden'}">
+          ${laemmleTheaters.map(t => `
+            <button class="dropdown-item dropdown-subitem${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
+              ${escHtml(t.name.replace(/^Laemmle\s+/, ''))}
+            </button>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
   nav.innerHTML = `
     <button class="theater-btn${selectedTheater === '__all__' ? ' active' : ''}" data-theater="__all__">All Upcoming</button>
     <div class="theater-dropdown-wrap">
       <button class="theater-dropdown-btn${theaterName ? ' active' : ''}" id="theater-dropdown-btn">${dropdownLabel} ▾</button>
       <div class="theater-dropdown-menu hidden" id="theater-dropdown-menu">
-        ${[...LA_THEATERS].sort((a, b) => a.name.localeCompare(b.name)).map(t => `
-          <button class="dropdown-item${selectedTheater === t.name ? ' active' : ''}" data-theater="${escHtml(t.name)}">
-            ${escHtml(t.name)}
-          </button>`).join('')}
+        ${menuHtml}
       </div>
     </div>
     <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
@@ -456,9 +487,21 @@ function renderTheaterNav() {
     menu.classList.toggle('hidden');
   });
 
-  menu.querySelectorAll('.dropdown-item').forEach(item => {
+  const groupBtn = nav.querySelector('#laemmle-group-btn');
+  if (groupBtn) {
+    groupBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      laemmleSubmenuOpen = !laemmleSubmenuOpen;
+      renderTheaterNav();
+      // Re-open the dropdown menu since renderTheaterNav rebuilds it hidden
+      nav.querySelector('#theater-dropdown-menu').classList.remove('hidden');
+    });
+  }
+
+  menu.querySelectorAll('.dropdown-item:not(.dropdown-group-header)').forEach(item => {
     item.addEventListener('click', () => {
       selectedTheater = item.dataset.theater;
+      if (item.classList.contains('dropdown-subitem')) laemmleSubmenuOpen = true;
       closeDropdown();
       renderTheaterNav();
       renderTheaterDetail();
