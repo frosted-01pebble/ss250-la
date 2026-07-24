@@ -288,6 +288,13 @@ let ss250Data = null;
 let ss250Loading = false;
 let ss250Query = '';
 let ss250Sort = 'rank';
+let ss250Reverse = false;
+
+// Strip accents/diacritics so a plain-ASCII search still matches accented names,
+// e.g. "Almodovar" matches "Almodóvar".
+function normalizeSearchText(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
 
 async function loadSS250Data() {
   if (ss250Data || ss250Loading) return;
@@ -309,16 +316,22 @@ function renderSS250Grid() {
   const container = document.getElementById('ss250-grid');
   if (!container || !ss250Data) return;
 
-  const q = ss250Query.trim().toLowerCase();
+  const q = normalizeSearchText(ss250Query.trim());
+  const decadeMatch = q.match(/^(\d{4})s$/);
+  const decadeStart = decadeMatch ? parseInt(decadeMatch[1], 10) : null;
+
   let films = [...ss250Data];
   if (q) films = films.filter(f =>
-    f.title.toLowerCase().includes(q) ||
-    (f.director && f.director.toLowerCase().includes(q)) ||
-    String(f.year).includes(q)
+    normalizeSearchText(f.title).includes(q) ||
+    (f.director && normalizeSearchText(f.director).includes(q)) ||
+    String(f.year).includes(q) ||
+    (f.countries && f.countries.some(c => normalizeSearchText(c).includes(q))) ||
+    (decadeStart !== null && Math.floor(f.year / 10) * 10 === decadeStart)
   );
   if (ss250Sort === 'title') films.sort((a, b) => a.title.localeCompare(b.title));
   else if (ss250Sort === 'year') films.sort((a, b) => a.year - b.year || a.rank - b.rank);
   else films.sort((a, b) => a.rank - b.rank);
+  if (ss250Reverse) films.reverse();
 
   if (films.length === 0) {
     container.innerHTML = `<p class="detail-empty" style="grid-column:1/-1;text-align:center;padding:2rem 0">No films match "${escHtml(ss250Query)}"</p>`;
@@ -372,13 +385,14 @@ function renderSS250Panel() {
 
   const toolbar = `
     <div class="ss250-toolbar">
-      <input class="ss250-search" type="text" placeholder="Search films…" value="${escHtml(ss250Query)}"
+      <input class="ss250-search" type="text" placeholder="Search title, director, country, or decade (e.g. 1950s)…" value="${escHtml(ss250Query)}"
         oninput="ss250Query=this.value;renderSS250Grid()">
       <div class="ss250-sort-btns">
         <button class="ss250-sort-btn${ss250Sort === 'rank'  ? ' active' : ''}" onclick="ss250Sort='rank';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Rank</button>
         <button class="ss250-sort-btn${ss250Sort === 'title' ? ' active' : ''}" onclick="ss250Sort='title';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Title</button>
         <button class="ss250-sort-btn${ss250Sort === 'year'  ? ' active' : ''}" onclick="ss250Sort='year';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Year</button>
       </div>
+      <button class="ss250-reverse-btn${ss250Reverse ? ' active' : ''}" title="Reverse order" onclick="ss250Reverse=!ss250Reverse;renderSS250Grid();this.classList.toggle('active')">⇅</button>
     </div>`;
 
   detail.innerHTML = about + toolbar + `<div class="ss250-grid" id="ss250-grid"></div>`;
