@@ -100,7 +100,12 @@ def _build_cache():
         ('gardena',              fetch_gardena_events),
         ('vidiots',              fetch_vidiots_events),
         ('alamo',                fetch_alamo_events),
-        ('oldtownmusichall',     fetch_oldtownmusichall_events),
+        # 'oldtownmusichall' disabled — tickets.oldtownmusichall.org is dead at the
+        # TLS layer (server sends a bare "internal error" alert before any cert,
+        # confirmed with curl/openssl too — not client-specific). The venue has
+        # moved to a new JS-rendered platform (Indy Systems/Quasar) with no
+        # server-rendered showtimes; fetch_oldtownmusichall_events is left in
+        # place below for whenever that gets rebuilt against the new site.
         ('culver',               fetch_culver_events),
         ('laemmle',              fetch_laemmle_events),
     ]
