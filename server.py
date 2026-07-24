@@ -102,6 +102,7 @@ def _build_cache():
         ('alamo',                fetch_alamo_events),
         ('oldtownmusichall',     fetch_oldtownmusichall_events),
         ('culver',               fetch_culver_events),
+        ('laemmle',              fetch_laemmle_events),
     ]
 
     _loading_progress = {'status': 'loading', 'done': 0, 'total': len(scrapers)}
@@ -1410,6 +1411,80 @@ def fetch_culver_events():
             'poster':  poster,
             'source':  'culver',
         })
+    return events
+
+
+# Physical Laemmle locations — (display name, site slug).
+# Claremont 5 is excluded: sold and closed as of Jan 2026 (laemmle.com/blog).
+LAEMMLE_THEATERS = [
+    ('Laemmle Royal',              'royal'),
+    ('Laemmle Monica Film Center', 'monica-film-center'),
+    ('Laemmle Glendale',           'glendale'),
+    ('Laemmle Town Center 5',      'town-center-5'),
+    ('Laemmle Newhall',            'newhall'),
+    ('Laemmle NoHo 7',             'noho-7'),
+]
+
+def _fetch_laemmle_day(theater_name, slug, date_str):
+    """One theater, one date — laemmle.com renders showtimes server-side per day
+    (Drupal), with no broader-range API available."""
+    try:
+        r = requests.get(
+            f'https://www.laemmle.com/theater/{slug}',
+            params={'date': date_str}, headers=HEADERS, timeout=20
+        )
+    except Exception:
+        return []
+    if r.status_code != 200:
+        return []
+
+    soup = BeautifulSoup(r.text, 'html.parser')
+    events = []
+    for movie in soup.select('div.movie'):
+        title_a = movie.select_one('.title > a')
+        if not title_a:
+            continue
+        title = title_a.get_text(strip=True)
+        if not title:
+            continue
+        href = title_a.get('href') or ''
+        url = f'https://www.laemmle.com{href}' if href.startswith('/') else href
+
+        img = movie.select_one('.poster img')
+        poster = img['src'] if img and img.get('src') else None
+
+        # Elapsed showtimes render as a bare <span>, not a ticket <a> — this
+        # selector naturally excludes them.
+        times = [a.get_text(strip=True).upper() for a in movie.select('.showtimes .showtime a')]
+        if not times:
+            continue
+
+        events.append({
+            'theater': theater_name,
+            'title':   title,
+            'date':    date_str,
+            'times':   times,
+            'format':  '',
+            'url':     url,
+            'poster':  poster,
+            'source':  'laemmle',
+        })
+    return events
+
+
+def fetch_laemmle_events():
+    """Laemmle Theatres — 7 LA County arthouse locations. Mostly first-run, but
+    the Anniversary Classics series occasionally screens Sight & Sound-caliber
+    revivals, so all daily programming is pulled and matched client-side."""
+    today = date.today()
+    days = [(today + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(21)]
+    tasks = [(name, slug, d) for name, slug in LAEMMLE_THEATERS for d in days]
+
+    events = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = [ex.submit(_fetch_laemmle_day, name, slug, d) for name, slug, d in tasks]
+        for fut in as_completed(futures):
+            events.extend(fut.result() or [])
     return events
 
 
