@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://ss250.la/sitemap.xml
+Sitemap: https://ss250la.com/sitemap.xml
