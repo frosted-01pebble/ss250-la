@@ -6,12 +6,13 @@ Also serves the static frontend files.
 Run: python3 server.py
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 import json, re, traceback, threading, time, os, html as html_lib
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import ssr
 from datetime import datetime, date, timedelta
 
 app = Flask(__name__, static_folder='.')
@@ -1745,9 +1746,31 @@ def health():
     return jsonify({'status': 'ok'})
 
 # Serve static frontend files
+_ssr_ss250 = None  # canonical rank/title/year list, parsed once
+
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    """Serve the homepage with the upcoming screenings pre-rendered into the HTML.
+
+    The page is otherwise client-rendered, which left crawlers indexing an empty
+    shell. app.js overwrites #theater-detail on its first render, so this is a
+    snapshot the interactive version replaces.
+
+    Any failure falls back to the plain shell — pre-rendering is an enhancement
+    for crawlers and first paint, never a reason for the page not to load.
+    """
+    global _ssr_ss250
+    try:
+        with open('index.html', encoding='utf-8') as f:
+            html = f.read()
+        if _ssr_ss250 is None:
+            _ssr_ss250 = _load_ss250_from_js()
+        events = (_cache['data'] or {}).get('events') or []
+        html = ssr.inject(html, events, _ssr_ss250, _cache['fetched_at'])
+        return Response(html, mimetype='text/html')
+    except Exception:
+        traceback.print_exc()
+        return send_from_directory('.', 'index.html')
 
 @app.route('/<path:path>')
 def static_files(path):

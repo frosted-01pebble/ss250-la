@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["server.py"],
       "port": 5001
+    },
+    {
+      "name": "ss250-cached",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["devserve.py"],
+      "port": 5055
     }
   ]
 }
