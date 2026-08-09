@@ -824,12 +824,6 @@ async function initPage() {
 
   renderTheaterNav();
   renderTheaterDetail();
-
-  const saved = localStorage.getItem(LS_KEY);
-  if (saved) {
-    currentApiKey = saved;
-    loadAndRender();
-  }
 }
 
 document.addEventListener('DOMContentLoaded', initPage);
@@ -842,6 +836,5 @@ setInterval(async () => {
     const data = await res.json();
     scraperEvents = data.events || [];
     renderTheaterDetail();
-    if (currentApiKey) loadAndRender();
   } catch (e) { /* ignore — stale data is fine */ }
 }, 60 * 60 * 1000); // every hour
