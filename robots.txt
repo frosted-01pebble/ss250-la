@@ -1,5 +1,8 @@
 User-agent: *
 Allow: /
-Disallow: /api/
+
+# /api/ is deliberately crawlable. The page is client-rendered, so a crawler that
+# can't fetch these endpoints renders an empty document. They return
+# X-Robots-Tag: noindex, which keeps the raw JSON out of search results.
 
 Sitemap: https://ss250la.com/sitemap.xml

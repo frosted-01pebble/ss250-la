@@ -6,7 +6,7 @@ Also serves the static frontend files.
 Run: python3 server.py
 """
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
@@ -1699,6 +1699,15 @@ def _build_ss250_cache():
     print(f'SS250 poster cache built — {len(data)} films')
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.after_request
+def no_index_api(resp):
+    # The frontend is client-rendered, so Googlebot has to fetch /api/ to see any
+    # content at all — robots.txt must not block it. Mark the JSON noindex instead
+    # so it's crawlable for rendering but never surfaces as its own search result.
+    if request.path.startswith('/api/') or request.path == '/health':
+        resp.headers['X-Robots-Tag'] = 'noindex'
+    return resp
 
 @app.route('/api/loading-status')
 def loading_status():
