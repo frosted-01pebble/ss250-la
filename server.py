@@ -7,6 +7,7 @@ Run: python3 server.py
 """
 
 from flask import Flask, Response, jsonify, request, send_from_directory
+from flask_compress import Compress
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
@@ -17,6 +18,11 @@ from datetime import datetime, date, timedelta
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
+
+# Cloudflare compresses what it sends to browsers, but the origin→Cloudflare hop
+# was uncompressed — and that's the hop the host bills for. /api/showtimes alone
+# was leaving here at 381KB to arrive as 36KB.
+Compress(app)
 
 # ── Cache ──────────────────────────────────────────────────────────────────────
 _cache = {'data': None, 'fetched_at': 0}

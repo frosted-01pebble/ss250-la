@@ -18,12 +18,20 @@ the interactive pieces (double-bill grouping, ON FILM filter, show-more).
 """
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 # The site is about LA screenings, so "today" is always Pacific — not the
 # server's clock, which on Railway is UTC and would drop the evening's shows.
-PACIFIC = ZoneInfo('America/Los_Angeles')
+#
+# This runs at import, so a missing tz database would take the whole server down
+# rather than skew a date. requirements.txt pins tzdata to guarantee it's there;
+# the fallback means a base-image change degrades the cutoff by a few hours
+# instead of returning 500s.
+try:
+    PACIFIC = ZoneInfo('America/Los_Angeles')
+except Exception:
+    PACIFIC = timezone.utc
 
 # Cap on rendered rows. The list is a crawlable snapshot, not the live UI, and
 # every row is markup shipped on each request.

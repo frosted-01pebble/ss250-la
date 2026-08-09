@@ -1,5 +1,7 @@
 flask
+flask-compress
 flask-cors
+tzdata
 requests
 beautifulsoup4
 playwright
