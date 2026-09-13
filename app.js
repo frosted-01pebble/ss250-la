@@ -319,19 +319,16 @@ function mergeDoubleBills(matches) {
 
 // --- Views, filters and URLs ---
 // Each view and filter is kept in the URL — ?theater=landmark-nuart-theatre,
-// ?view=ss250, ?film=singin-in-the-rain-1952, plus ?when=weekend, ?onfilm=1
-// and ?q= — so any view can be shared, bookmarked, and reached with Back.
+// ?view=ss250, ?film=singin-in-the-rain-1952, plus ?when=week, ?onfilm=1, and
+// ?q= on the S&S 250 page — so any view can be shared, bookmarked, and reached with Back.
 
 const FILM_RE = /\b(16mm|35mm|70mm)\b/i;
 const DATE_FILTERS = [
-  { key: 'all',     label: 'All dates' },
-  { key: 'today',   label: 'Today' },
-  { key: 'weekend', label: 'This weekend' },
-  { key: 'week',    label: 'Next 7 days' },
+  { key: 'all',  label: 'All dates' },
+  { key: 'week', label: 'This week' },  // the next 7 days
 ];
 
 let dateFilter = 'all';
-let listQuery = '';
 let selectedFilm = null;        // the S&S entry shown when selectedTheater === '__film__'
 let showtimesFetchedAt = null;  // when the server last scraped, epoch seconds
 
@@ -353,7 +350,6 @@ function stateToUrl() {
     else if (selectedTheater && !selectedTheater.startsWith('__')) p.set('theater', slugify(selectedTheater));
     if (dateFilter !== 'all') p.set('when', dateFilter);
     if (filmFilterActive) p.set('onfilm', '1');
-    if (selectedTheater === '__all__' && listQuery.trim()) p.set('q', listQuery.trim());
   }
   const qs = p.toString();
   return location.pathname + (qs ? `?${qs}` : '');
@@ -384,8 +380,6 @@ function stateFromUrl() {
   if (selectedTheater === '__ss250__') {
     ss250Query = q;
     ss250PlayingOnly = p.get('playing') === '1';
-  } else {
-    listQuery = selectedTheater === '__all__' ? q : '';
   }
 }
 
@@ -421,30 +415,12 @@ function addDays(dateStr, n) {
 
 // First and last date (inclusive) a date filter allows, or null for all dates
 function dateFilterRange(key, today) {
-  if (key === 'today') return [today, today];
-  if (key === 'week') return [today, addDays(today, 6)];
-  if (key === 'weekend') {
-    const [y, m, d] = today.split('-').map(Number);
-    const dow = new Date(y, m - 1, d).getDay();  // 0 Sun … 6 Sat
-    if (dow === 0) return [today, today];
-    return [dow >= 5 ? today : addDays(today, 5 - dow), addDays(today, 7 - dow)];
-  }
-  return null;
+  return key === 'week' ? [today, addDays(today, 6)] : null;
 }
 
 // --- Matching screenings ---
 function ssDetails(ss) {
   return (ss250Data || []).find(f => f.title === ss.title && f.year === ss.year) || null;
-}
-
-// "1970s" matches by decade; anything else matches title, year, theater,
-// director, or country (the last two once the S&S 250 details have loaded)
-function matchesListQuery(ev, ss, q) {
-  const decade = q.match(/^(\d{3})0s$/);
-  if (decade) return Math.floor(ss.year / 10) === parseInt(decade[1], 10);
-  const info = ssDetails(ss) || {};
-  return [ss.title, String(ss.year), ev.theater, stripEntities(ev.title), info.director, ...(info.countries || [])]
-    .some(v => v && normalizeSearchText(v).includes(q));
 }
 
 // True if the film is either half of the screening
@@ -456,10 +432,9 @@ function involvesFilm(ev, ss, film) {
 }
 
 // Upcoming S&S screenings, narrowed by theater or film and the current filters
-function upcomingMatches({ theater = null, film = null, query = '' } = {}) {
+function upcomingMatches({ theater = null, film = null } = {}) {
   const today = todayStr();
   const range = dateFilterRange(dateFilter, today);
-  const q = normalizeSearchText(query.trim());
   return mergeDoubleBills(
     scraperEvents
       .filter(e => e.date >= today
@@ -467,9 +442,7 @@ function upcomingMatches({ theater = null, film = null, query = '' } = {}) {
         && (!range || (e.date >= range[0] && e.date <= range[1]))
         && (!filmFilterActive || FILM_RE.test(e.format || '')))
       .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
-      .filter(({ ev, ss }) => ss !== null
-        && (!film || involvesFilm(ev, ss, film))
-        && (!q || matchesListQuery(ev, ss, q)))
+      .filter(({ ev, ss }) => ss !== null && (!film || involvesFilm(ev, ss, film)))
       .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
   );
 }
@@ -563,13 +536,9 @@ function directorHtml(ss, partnerSS) {
   return names.length ? `<div class="screening-director">Dir. ${escHtml(names.join(' / '))}</div>` : '';
 }
 
-// Calendar and ↗ buttons under a row's date; ↗ opens the same page as the row itself
-function rowActionsHtml(ev, url, summary) {
-  return `
-    <div class="row-actions">
-      ${calButtonHtml(ev, summary)}
-      <a class="row-action" href="${escHtml(url)}" target="_blank" rel="noopener" title="Open on the theater's site" aria-label="Open ${escHtml(summary)} on the theater's site">↗</a>
-    </div>`;
+// Calendar button under a row's date
+function rowActionsHtml(ev, summary) {
+  return `<div class="row-actions">${calButtonHtml(ev, summary)}</div>`;
 }
 
 let calEvents = new Map();
@@ -671,15 +640,7 @@ function bindDetailEvents() {
         if (film) goTo('__film__', film);
       }
     }
-  });
-  // The search box sits in the nav, outside the panel
-  document.addEventListener('input', e => {
-    if (!e.target.matches('.list-search')) return;
-    listQuery = e.target.value;
-    renderScreeningResults();
-    syncUrl(false);
-  });
-}
+  });}
 
 // --- SS250 panel ---
 let ss250Data = null;
@@ -889,12 +850,7 @@ function renderTheaterNav() {
         ${menuHtml}
       </div>
     </div>
-    <button class="theater-btn${selectedTheater === '__ss250__' || selectedTheater === '__film__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>
-    ${selectedTheater === '__all__' ? `
-    <div class="nav-search">
-      <input class="list-search" type="search" value="${escHtml(listQuery)}"
-        placeholder="Search title, director, theater, or decade (e.g. 1970s)…" aria-label="Search screenings">
-    </div>` : ''}`;
+    <button class="theater-btn${selectedTheater === '__ss250__' || selectedTheater === '__film__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
 
   nav.querySelector('[data-theater="__all__"]').addEventListener('click', () => goTo('__all__'));
   nav.querySelector('#ss250-btn').addEventListener('click', () => goTo('__ss250__'));
@@ -986,21 +942,23 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const url = ev.url || scheduleUrl;
   const summary = calendarSummary(ss, partner, partnerSS);
   // Every piece is a direct grid item, placed on a shared line by CSS:
-  // line 1 date · rank · title · theater, line 2 icons · director · time,
-  // line 3 "followed by …" · format
+  // line 1 date · rank · title, line 2 calendar · director,
+  // line 3 "followed by …" · theater · format · time
   return `
     <div class="screening-row">
       <div class="screening-date-col">
         <span class="screening-date">${escHtml(dateLabel)}</span>
-        ${rowActionsHtml(ev, url, summary)}
+        ${rowActionsHtml(ev, summary)}
       </div>
       <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
       <div class="screening-title"><a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener"><em>${escHtml(ss.title)}</em></a> <span class="screening-year">(${ss.year})</span>${partnerSS ? partnerHtml(partner, ssSecond, partnerSS) : ''}</div>
       ${directorHtml(ss, partnerSS)}
       ${partnerSS ? '' : partnerHtml(partner, ssSecond, null)}
-      ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-      ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
-      ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+      <div class="screening-meta">
+        ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+        ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+        ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+      </div>
     </div>`;
 }
 
@@ -1026,9 +984,11 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
       <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerSS ? partnerHtml(partner, ssSecond, partnerSS) : ''}</div>
       ${directorHtml(ss, partnerSS)}
       ${partnerSS ? '' : partnerHtml(partner, ssSecond, null)}
-      ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-      <span class="screening-count" id="group-arrow-${id}" data-count="${dates.length}">▶ ${dates.length}</span>
-      ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+      <div class="screening-meta">
+        ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+        ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+        <span class="screening-count" id="group-arrow-${id}" data-count="${dates.length}">▶ ${dates.length}</span>
+      </div>
     </div>`;
 
   const sep = (partner && !partnerSS) ? ' / ' : ', ';
@@ -1041,7 +1001,7 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
       <div class="screening-row screening-row-child">
         <div class="screening-date-col">
           <span class="screening-date">${escHtml(childDate)}</span>
-          ${rowActionsHtml(cev, url, summary)}
+          ${rowActionsHtml(cev, summary)}
         </div>
         <a class="row-link screening-child-link" href="${escHtml(url)}" target="_blank" rel="noopener">${times
           ? `<span class="screening-time">${escHtml(times)}</span>`
@@ -1104,9 +1064,9 @@ function renderTheaterDetail() {
       <div class="detail-header">
         <div class="detail-header-left">
           <div class="detail-title-row">
-            <div class="detail-theater-name">All Upcoming</div>
+            <div class="detail-theater-name">Coming Soon to an LA Theater Near You</div>
           </div>
-          <div class="detail-meta">Every Sight &amp; Sound screening across LA venues</div>
+          <div class="detail-meta">Every Sight &amp; Sound film screening across LA venues</div>
         </div>
       </div>`;
   } else if (selectedTheater === '__film__') {
@@ -1134,12 +1094,11 @@ function renderScreeningResults() {
   const matches = upcomingMatches({
     theater: isAll || isFilm ? null : selectedTheater,
     film: isFilm ? selectedFilm : null,
-    query: isAll ? listQuery : '',
   });
   calEvents = new Map();
 
   if (matches.length === 0) {
-    const narrowed = dateFilter !== 'all' || filmFilterActive || (isAll && listQuery.trim());
+    const narrowed = dateFilter !== 'all' || filmFilterActive;
     box.innerHTML = `<p class="detail-empty">${narrowed
       ? 'No screenings match these filters.'
       : 'No upcoming Sight &amp; Sound screenings found.'}</p>`;
@@ -1149,7 +1108,7 @@ function renderScreeningResults() {
   const rows = buildScreeningRowsList(matches, true, true);
   const LIMIT = 12;
   // Only the unfiltered All Upcoming list is long enough to fold
-  if (!isAll || dateFilter !== 'all' || listQuery.trim() || rows.length <= LIMIT) {
+  if (!isAll || dateFilter !== 'all' || rows.length <= LIMIT) {
     box.innerHTML = `<div class="screening-list">${rows.join('')}</div>`;
     return;
   }
@@ -1236,7 +1195,7 @@ async function initPage() {
   renderView();
   syncUrl(false);  // drop any parameters that didn't resolve
 
-  // Directors and countries, for the rows, film pages, and screening search
+  // Directors, for the rows and film pages
   fetchSS250Data().then(() => {
     if (selectedTheater === '__film__') renderTheaterDetail();
     else if (selectedTheater !== '__ss250__') renderScreeningResults();

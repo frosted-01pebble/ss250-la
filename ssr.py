@@ -281,13 +281,13 @@ def _row_html(ev, ss, today):
     # on the same lines as the interactive one that replaces it
     times = ', '.join(ev.get('times') or [])
     fmt = ' / '.join(p.strip() for p in (ev.get('format') or '').split(',') if p.strip())
-    details = ''
+    meta = ''
     if ev.get('theater'):
-        details += f'<span class="screening-theater">{esc(ev["theater"])}</span>'
-    if times:
-        details += f'<span class="screening-time">{esc(times)}</span>'
+        meta += f'<span class="screening-theater">{esc(ev["theater"])}</span>'
     if fmt:
-        details += f'<span class="screening-format">{esc(fmt)}</span>'
+        meta += f'<span class="screening-format">{esc(fmt)}</span>'
+    if times:
+        meta += f'<span class="screening-time">{esc(times)}</span>'
     return (
         f'<a class="screening-row" href="{esc(ev.get("url") or "/")}" target="_blank" rel="noopener">'
         f'<div class="screening-date-col">'
@@ -295,7 +295,7 @@ def _row_html(ev, ss, today):
         f'<span class="screening-rank">#{esc(ss.get("rank"))}</span>'
         f'<div class="screening-title"><em>{esc(ss["title"])}</em> '
         f'<span class="screening-year">({esc(ss.get("year"))})</span></div>'
-        f'{details}</a>'
+        f'<div class="screening-meta">{meta}</div></a>'
     )
 
 
@@ -308,8 +308,8 @@ def render_detail(events, ss_list, today=None):
     rows = ''.join(_row_html(ev, ss, today) for ev, ss in matches[:MAX_ROWS])
     return (
         '<div class="detail-header"><div class="detail-header-left">'
-        '<div class="detail-title-row"><div class="detail-theater-name">All Upcoming</div></div>'
-        '<div class="detail-meta">Every Sight &amp; Sound screening across all LA venues</div>'
+        '<div class="detail-title-row"><div class="detail-theater-name">Coming Soon to an LA Theater Near You</div></div>'
+        '<div class="detail-meta">Every Sight &amp; Sound film screening across LA venues</div>'
         '</div></div>'
         f'<div class="screening-list">{rows}</div>'
     )
