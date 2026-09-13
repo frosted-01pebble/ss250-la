@@ -1944,7 +1944,9 @@ def loading_status():
 
 @app.route('/api/showtimes')
 def showtimes():
-    return jsonify(_cache['data'] or {'events': [], 'errors': {}})
+    data = _cache['data'] or {'events': [], 'errors': {}}
+    # fetched_at lets the page say how fresh the showtimes are
+    return jsonify({**data, 'fetched_at': int(_cache['fetched_at']) or None})
 
 @app.route('/api/ss250')
 def ss250_api():

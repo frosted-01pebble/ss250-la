@@ -317,27 +317,369 @@ function mergeDoubleBills(matches) {
   return out;
 }
 
-// --- Scraper data ---
-function getUpcomingSSForTheater(theaterName) {
-  const today = todayStr();
-  const matches = scraperEvents
-    .filter(e => e.theater === theaterName && e.date >= today)
-    .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
-    .filter(({ ss }) => ss !== null)
-    .sort((a, b) => a.ev.date.localeCompare(b.ev.date));
-  return mergeDoubleBills(matches);
+// --- Views, filters and URLs ---
+// Each view and filter is kept in the URL — ?theater=landmark-nuart-theatre,
+// ?view=ss250, ?film=singin-in-the-rain-1952, plus ?when=weekend, ?onfilm=1
+// and ?q= — so any view can be shared, bookmarked, and reached with Back.
+
+const FILM_RE = /\b(16mm|35mm|70mm)\b/i;
+const DATE_FILTERS = [
+  { key: 'all',     label: 'All dates' },
+  { key: 'today',   label: 'Today' },
+  { key: 'weekend', label: 'This weekend' },
+  { key: 'week',    label: 'Next 7 days' },
+];
+
+let dateFilter = 'all';
+let listQuery = '';
+let selectedFilm = null;        // the S&S entry shown when selectedTheater === '__film__'
+let showtimesFetchedAt = null;  // when the server last scraped, epoch seconds
+
+function slugify(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/['\u2019]/g, '').replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+const filmSlug = f => `${slugify(f.title)}-${f.year}`;
+
+function stateToUrl() {
+  const p = new URLSearchParams();
+  if (selectedTheater === '__ss250__') {
+    p.set('view', 'ss250');
+    if (ss250Query.trim()) p.set('q', ss250Query.trim());
+    if (ss250PlayingOnly) p.set('playing', '1');
+  } else {
+    if (selectedTheater === '__film__' && selectedFilm) p.set('film', filmSlug(selectedFilm));
+    else if (selectedTheater && !selectedTheater.startsWith('__')) p.set('theater', slugify(selectedTheater));
+    if (dateFilter !== 'all') p.set('when', dateFilter);
+    if (filmFilterActive) p.set('onfilm', '1');
+    if (selectedTheater === '__all__' && listQuery.trim()) p.set('q', listQuery.trim());
+  }
+  const qs = p.toString();
+  return location.pathname + (qs ? `?${qs}` : '');
 }
 
-function theatersWithMatches() {
-  return LA_THEATERS.filter(t => getUpcomingSSForTheater(t.name).length > 0);
+// Push for a change of view, so Back returns to it; replace for filter tweaks
+function syncUrl(push) {
+  const url = stateToUrl();
+  if (url === location.pathname + location.search) return;
+  history[push ? 'pushState' : 'replaceState'](null, '', url);
+}
+
+function stateFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const theater = LA_THEATERS.find(t => slugify(t.name) === p.get('theater'));
+  const film = SS250_CANONICAL.find(f => filmSlug(f) === p.get('film'));
+  if (p.get('view') === 'ss250') selectedTheater = '__ss250__';
+  else if (film) selectedTheater = '__film__';
+  else if (theater) selectedTheater = theater.name;
+  else selectedTheater = '__all__';
+  selectedFilm = film || null;
+  if (theater && theater.name.startsWith('Laemmle')) laemmleSubmenuOpen = true;
+
+  const when = p.get('when');
+  dateFilter = DATE_FILTERS.some(f => f.key === when) ? when : 'all';
+  filmFilterActive = p.get('onfilm') === '1';
+  const q = p.get('q') || '';
+  if (selectedTheater === '__ss250__') {
+    ss250Query = q;
+    ss250PlayingOnly = p.get('playing') === '1';
+  } else {
+    listQuery = selectedTheater === '__all__' ? q : '';
+  }
+}
+
+function renderView() {
+  if (selectedTheater === '__ss250__') renderSS250Panel();
+  else renderTheaterDetail();
+}
+
+// Change view: redraw, add a history entry, and bring the new view into sight
+function goTo(view, film = null) {
+  selectedTheater = view;
+  selectedFilm = film;
+  closeDropdown();
+  renderTheaterNav();
+  renderView();
+  syncUrl(true);
+  const top = document.querySelector('header').getBoundingClientRect().bottom + window.scrollY;
+  if (window.scrollY > top) window.scrollTo({ top });
+}
+
+window.addEventListener('popstate', () => {
+  if (!scraperLoaded) return;
+  stateFromUrl();
+  renderTheaterNav();
+  renderView();
+});
+
+// --- Date filters ---
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d + n).toLocaleDateString('en-CA');
+}
+
+// First and last date (inclusive) a date filter allows, or null for all dates
+function dateFilterRange(key, today) {
+  if (key === 'today') return [today, today];
+  if (key === 'week') return [today, addDays(today, 6)];
+  if (key === 'weekend') {
+    const [y, m, d] = today.split('-').map(Number);
+    const dow = new Date(y, m - 1, d).getDay();  // 0 Sun … 6 Sat
+    if (dow === 0) return [today, today];
+    return [dow >= 5 ? today : addDays(today, 5 - dow), addDays(today, 7 - dow)];
+  }
+  return null;
+}
+
+// --- Matching screenings ---
+function ssDetails(ss) {
+  return (ss250Data || []).find(f => f.title === ss.title && f.year === ss.year) || null;
+}
+
+// "1970s" matches by decade; anything else matches title, year, theater,
+// director, or country (the last two once the S&S 250 details have loaded)
+function matchesListQuery(ev, ss, q) {
+  const decade = q.match(/^(\d{3})0s$/);
+  if (decade) return Math.floor(ss.year / 10) === parseInt(decade[1], 10);
+  const info = ssDetails(ss) || {};
+  return [ss.title, String(ss.year), ev.theater, stripEntities(ev.title), info.director, ...(info.countries || [])]
+    .some(v => v && normalizeSearchText(v).includes(q));
+}
+
+// True if the film is either half of the screening
+function involvesFilm(ev, ss, film) {
+  if (ss.title === film.title) return true;
+  const partner = doubleFeaturePartner(stripEntities(ev.title), ss);
+  const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+  return !!partnerSS && partnerSS.title === film.title;
+}
+
+// Upcoming S&S screenings, narrowed by theater or film and the current filters
+function upcomingMatches({ theater = null, film = null, query = '' } = {}) {
+  const today = todayStr();
+  const range = dateFilterRange(dateFilter, today);
+  const q = normalizeSearchText(query.trim());
+  return mergeDoubleBills(
+    scraperEvents
+      .filter(e => e.date >= today
+        && (!theater || e.theater === theater)
+        && (!range || (e.date >= range[0] && e.date <= range[1]))
+        && (!filmFilterActive || FILM_RE.test(e.format || '')))
+      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
+      .filter(({ ev, ss }) => ss !== null
+        && (!film || involvesFilm(ev, ss, film))
+        && (!q || matchesListQuery(ev, ss, q)))
+      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
+  );
+}
+
+let _playingCache = { events: null, counts: new Map() };
+
+// S&S title -> number of upcoming screening days in LA (either half of a double bill counts)
+function playingFilmCounts() {
+  if (_playingCache.events === scraperEvents) return _playingCache.counts;
+  const today = todayStr();
+  const seen = new Map();
+  const add = (title, ev) => {
+    if (!seen.has(title)) seen.set(title, new Set());
+    seen.get(title).add(`${ev.theater}|${ev.date}`);
+  };
+  for (const ev of scraperEvents) {
+    if (ev.date < today) continue;
+    const raw = stripEntities(ev.title);
+    const ss = findSSMatchByTitle(raw, ev.year);
+    if (!ss) continue;
+    add(ss.title, ev);
+    const partner = doubleFeaturePartner(raw, ss);
+    const partnerSS = partner ? findSSMatchByTitle(partner) : null;
+    if (partnerSS) add(partnerSS.title, ev);
+  }
+  const counts = new Map([...seen].map(([title, days]) => [title, days.size]));
+  _playingCache = { events: scraperEvents, counts };
+  return counts;
+}
+
+// --- Filter bar and list note ---
+function filterBarHtml({ search }) {
+  return `
+    <div class="filter-bar">
+      ${search ? `<input class="list-search" type="search" value="${escHtml(listQuery)}"
+        placeholder="Search title, director, theater, or decade (e.g. 1970s)…" aria-label="Search screenings">` : ''}
+      <div class="filter-chips" role="group" aria-label="Filter screenings">
+        ${DATE_FILTERS.map(f => `<button type="button" class="filter-chip${dateFilter === f.key ? ' active' : ''}" data-when="${f.key}" aria-pressed="${dateFilter === f.key}">${f.label}</button>`).join('')}
+        <button type="button" class="theater-btn film-btn${filmFilterActive ? ' film-active' : ''}" data-onfilm aria-pressed="${filmFilterActive}" title="Only 35mm, 70mm and 16mm prints">ON FILM</button>
+      </div>
+    </div>`;
+}
+
+function updateFilterBar() {
+  document.querySelectorAll('.filter-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.when === dateFilter);
+    b.setAttribute('aria-pressed', b.dataset.when === dateFilter);
+  });
+  document.querySelectorAll('[data-onfilm]').forEach(b => {
+    b.classList.toggle('film-active', filmFilterActive);
+    b.setAttribute('aria-pressed', filmFilterActive);
+  });
+}
+
+function updatedLabel() {
+  if (!showtimesFetchedAt) return '';
+  const mins = Math.max(0, Math.round((Date.now() / 1000 - showtimesFetchedAt) / 60));
+  if (mins < 1) return 'Showtimes updated just now';
+  if (mins < 60) return `Showtimes updated ${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  return `Showtimes updated ${hrs} hr${hrs === 1 ? '' : 's'} ago`;
+}
+
+function refreshUpdatedLabels() {
+  document.querySelectorAll('.updated-label').forEach(el => { el.textContent = updatedLabel(); });
+}
+
+function listNoteHtml() {
+  return `
+    <p class="list-note">
+      <span class="note-rank">#10</span> = rank in the 2022 Sight &amp; Sound poll
+      · Rows open the theater's page ↗<span class="updated-label">${updatedLabel()}</span>
+    </p>`;
+}
+
+function filmHeaderHtml(film) {
+  const info = ssDetails(film) || {};
+  const tie = _tiedRanks.has(film.rank) ? ' (tied)' : '';
+  return `
+    <div class="detail-header">
+      <div class="detail-header-left">
+        <a class="back-link" href="?view=ss250" data-nav="__ss250__">← The S&amp;S 250</a>
+        <div class="detail-title-row">
+          <div class="detail-theater-name"><em>${escHtml(film.title)}</em> <span class="screening-year">(${film.year})</span></div>
+        </div>
+        <div class="detail-meta">#${film.rank}${tie} in the 2022 Sight &amp; Sound poll${info.director ? ` · Dir. ${escHtml(info.director)}` : ''} · Every upcoming LA screening</div>
+      </div>
+      ${info.imdb_url ? `<div class="detail-header-right"><a class="detail-schedule-link" href="${escHtml(info.imdb_url)}" target="_blank" rel="noopener">IMDb ↗</a></div>` : ''}
+    </div>`;
+}
+
+// --- Add to calendar ---
+const CAL_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 8.5v3.5M6.25 10.25h3.5"/></svg>`;
+const EXTERNAL_MARK = `<i class="external-mark" aria-hidden="true">↗</i><small class="sr-only"> (opens the theater's site in a new tab)</small>`;
+
+let calEvents = new Map();
+let _calCounter = 0;
+
+function calendarSummary(ss, partner, partnerSS) {
+  if (partnerSS) return `${ss.title} / ${partnerSS.title}`;
+  if (partner) return `${ss.title} / ${partner.replace(/\s*\(\d{4}\)/g, '')}`;
+  return `${ss.title} (${ss.year})`;
+}
+
+function calButtonHtml(ev, summary) {
+  const id = _calCounter++;
+  calEvents.set(id, { ev, summary });
+  const label = `Add ${summary} on ${formatScreeningDate(ev.date)} to your calendar`;
+  return `<button type="button" class="cal-btn" data-cal="${id}" title="Add to calendar" aria-label="${escHtml(label)}">${CAL_ICON}</button>`;
+}
+
+function icsText(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+
+function icsLocal(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
+}
+
+// One event per showtime; a listing with no times becomes an all-day event
+function buildIcs({ ev, summary }) {
+  const [y, m, d] = ev.date.split('-').map(Number);
+  const ymd = ev.date.replace(/-/g, '');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const theater = LA_THEATERS.find(t => t.name === ev.theater);
+  const place = theater && theater.neighborhood ? `${ev.theater}, ${theater.neighborhood}` : ev.theater;
+  const times = (ev.times || []).filter(t => /\d:\d\d\s*(am|pm)/i.test(t));
+  const vevents = (times.length ? times : [null]).map((t, i) => {
+    let when;
+    if (t) {
+      const start = new Date(y, m - 1, d, 0, _timeToMinutes(t));
+      const end = new Date(start.getTime() + 150 * 60000);  // runtimes aren't in the data
+      when = [`DTSTART;TZID=America/Los_Angeles:${icsLocal(start)}`, `DTEND;TZID=America/Los_Angeles:${icsLocal(end)}`];
+    } else {
+      const next = new Date(y, m - 1, d + 1).toLocaleDateString('en-CA').replace(/-/g, '');
+      when = [`DTSTART;VALUE=DATE:${ymd}`, `DTEND;VALUE=DATE:${next}`];
+    }
+    return [
+      'BEGIN:VEVENT',
+      `UID:${ymd}-${i}-${slugify(ev.theater)}-${slugify(summary)}@ss250la.com`,
+      `DTSTAMP:${stamp}`,
+      ...when,
+      `SUMMARY:${icsText(summary)}`,
+      `LOCATION:${icsText(place)}`,
+      `DESCRIPTION:${icsText([ev.format, ev.url].filter(Boolean).join('\n'))}`,
+      ev.url ? `URL:${ev.url}` : null,
+      'END:VEVENT',
+    ].filter(Boolean).join('\r\n');
+  });
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ss250la.com//Screenings//EN',
+          'CALSCALE:GREGORIAN', ...vevents, 'END:VCALENDAR'].join('\r\n');
+}
+
+function downloadCalendar(id) {
+  const item = calEvents.get(id);
+  if (!item) return;
+  const blob = new Blob([buildIcs(item)], { type: 'text/calendar;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${slugify(item.summary)}-${item.ev.date}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// One set of listeners on the panel, since its contents are redrawn on every change
+function bindDetailEvents() {
+  const detail = document.getElementById('theater-detail');
+  detail.addEventListener('click', e => {
+    const chip = e.target.closest('[data-when]');
+    const onFilm = e.target.closest('[data-onfilm]');
+    const cal = e.target.closest('[data-cal]');
+    const filmLink = e.target.closest('[data-film]');
+    const navLink = e.target.closest('[data-nav]');
+    if (chip || onFilm) {
+      if (chip) dateFilter = chip.dataset.when;
+      else filmFilterActive = !filmFilterActive;
+      updateFilterBar();
+      renderScreeningResults();
+      syncUrl(false);
+    } else if (cal) {
+      downloadCalendar(Number(cal.dataset.cal));
+    } else if (filmLink || navLink) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey) return;  // let the browser open it in a new tab
+      e.preventDefault();
+      if (navLink) {
+        goTo(navLink.dataset.nav);
+      } else {
+        const film = SS250_CANONICAL.find(f => filmSlug(f) === filmLink.dataset.film);
+        if (film) goTo('__film__', film);
+      }
+    }
+  });
+  detail.addEventListener('input', e => {
+    if (!e.target.matches('.list-search')) return;
+    listQuery = e.target.value;
+    renderScreeningResults();
+    syncUrl(false);
+  });
 }
 
 // --- SS250 panel ---
 let ss250Data = null;
-let ss250Loading = false;
+let ss250Promise = null;
 let ss250Query = '';
 let ss250Sort = 'rank';
 let ss250Reverse = false;
+let ss250PlayingOnly = false;
 
 // Strip accents/diacritics so a plain-ASCII search still matches accented names,
 // e.g. "Almodovar" matches "Almodóvar".
@@ -345,20 +687,23 @@ function normalizeSearchText(s) {
   return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
+// Shared by the S&S 250 panel, film pages, and screening search (directors, countries)
+function fetchSS250Data() {
+  if (!ss250Promise) {
+    ss250Promise = fetch('/api/ss250', { signal: AbortSignal.timeout(30000) })
+      .then(res => res.json())
+      .catch(() => [])
+      .then(data => (ss250Data = data));
+  }
+  return ss250Promise;
+}
+
 async function loadSS250Data() {
-  if (ss250Data || ss250Loading) return;
-  ss250Loading = true;
   const detail = document.getElementById('theater-detail');
   detail.innerHTML = `<p class="detail-empty" style="padding:3rem 0;text-align:center">Loading full list…</p>`;
   detail.classList.remove('hidden');
-  try {
-    const res = await fetch('/api/ss250', { signal: AbortSignal.timeout(30000) });
-    ss250Data = await res.json();
-  } catch (e) {
-    ss250Data = [];
-  }
-  ss250Loading = false;
-  renderSS250Panel();
+  await fetchSS250Data();
+  if (selectedTheater === '__ss250__') renderSS250Panel();
 }
 
 function renderSS250Grid() {
@@ -369,7 +714,9 @@ function renderSS250Grid() {
   const decadeMatch = q.match(/^(\d{4})s$/);
   const decadeStart = decadeMatch ? parseInt(decadeMatch[1], 10) : null;
 
+  const playing = playingFilmCounts();
   let films = [...ss250Data];
+  if (ss250PlayingOnly) films = films.filter(f => playing.has(f.title));
   if (q) films = films.filter(f =>
     normalizeSearchText(f.title).includes(q) ||
     (f.director && normalizeSearchText(f.director).includes(q)) ||
@@ -383,18 +730,23 @@ function renderSS250Grid() {
   if (ss250Reverse) films.reverse();
 
   if (films.length === 0) {
-    container.innerHTML = `<p class="detail-empty" style="grid-column:1/-1;text-align:center;padding:2rem 0">No films match "${escHtml(ss250Query)}"</p>`;
+    const message = q ? `No films match "${escHtml(ss250Query)}"` : 'None of the 250 are playing in LA right now.';
+    container.innerHTML = `<p class="detail-empty" style="grid-column:1/-1;text-align:center;padding:2rem 0">${message}</p>`;
     return;
   }
 
-  container.innerHTML = films.map(f => `
-    <div class="ss250-card">
-      <a class="ss250-poster-link" href="${escHtml(f.imdb_url || '#')}" target="_blank" rel="noopener">
+  container.innerHTML = films.map(f => {
+    const days = playing.get(f.title) || 0;
+    const slug = filmSlug(f);
+    return `
+    <div class="ss250-card${days ? ' is-playing' : ''}">
+      <a class="ss250-poster-link" href="${escHtml(f.imdb_url || '#')}" target="_blank" rel="noopener" title="${escHtml(f.title)} on IMDb">
         <div class="ss250-poster-wrap">
           ${f.poster
             ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
             : `<div class="ss250-poster-placeholder">🎬</div>`}
-          <span class="ss250-rank">${rankLabel(f.rank)}</span>
+          <span class="ss250-rank" title="${escHtml(rankTitle(f))}">${rankLabel(f.rank)}</span>
+          ${days ? `<span class="ss250-now">Now playing</span>` : ''}
         </div>
       </a>
       <div class="ss250-card-info">
@@ -404,8 +756,10 @@ function renderSS250Grid() {
           <span class="ss250-card-year">${f.year}</span>
           ${f.countries && f.countries.length ? `<span class="ss250-card-countries">${escHtml(f.countries.join(', '))}</span>` : ''}
         </div>
+        ${days ? `<a class="ss250-playing-link" href="?film=${escHtml(slug)}" data-film="${escHtml(slug)}">${days} screening day${days === 1 ? '' : 's'} in LA →</a>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderSS250Panel() {
@@ -424,7 +778,8 @@ function renderSS250Panel() {
       making it the first film directed by a woman to lead the list. The poll also expanded from
       100 to 250 films, opening the canon to more global and contemporary cinema.</p>
       <p>Below is the full 2022 list — 250 films that, according to the world's leading film minds,
-      represent the pinnacle of cinema. Each title links to its Sight &amp; Sound entry.</p>
+      represent the pinnacle of cinema. Posters link to each film's IMDb page; films marked
+      <em>Now playing</em> link to their upcoming screenings in LA.</p>
     </div>`;
 
   if (!ss250Data) {
@@ -435,13 +790,14 @@ function renderSS250Panel() {
   const toolbar = `
     <div class="ss250-toolbar">
       <input class="ss250-search" type="text" placeholder="Search title, director, country, or decade (e.g. 1950s)…" value="${escHtml(ss250Query)}"
-        oninput="ss250Query=this.value;renderSS250Grid()">
+        oninput="ss250Query=this.value;renderSS250Grid();syncUrl(false)">
       <div class="ss250-sort-btns">
         <button class="ss250-sort-btn${ss250Sort === 'rank'  ? ' active' : ''}" onclick="ss250Sort='rank';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Rank</button>
         <button class="ss250-sort-btn${ss250Sort === 'title' ? ' active' : ''}" onclick="ss250Sort='title';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Title</button>
         <button class="ss250-sort-btn${ss250Sort === 'year'  ? ' active' : ''}" onclick="ss250Sort='year';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Year</button>
       </div>
       <button class="ss250-reverse-btn${ss250Reverse ? ' active' : ''}" title="Reverse order" onclick="ss250Reverse=!ss250Reverse;renderSS250Grid();this.classList.toggle('active')">⇅</button>
+      <button class="ss250-reverse-btn ss250-playing-btn${ss250PlayingOnly ? ' active' : ''}" title="Only films screening in LA" onclick="ss250PlayingOnly=!ss250PlayingOnly;this.classList.toggle('active');renderSS250Grid();syncUrl(false)">Playing now</button>
     </div>`;
 
   detail.innerHTML = about + toolbar + `<div class="ss250-grid" id="ss250-grid"></div>`;
@@ -481,7 +837,7 @@ function renderTheaterNav() {
     return;
   }
 
-  const theaterName = selectedTheater && selectedTheater !== '__all__' && selectedTheater !== '__ss250__' ? selectedTheater : null;
+  const theaterName = selectedTheater && !selectedTheater.startsWith('__') ? selectedTheater : null;
   const dropdownLabel = theaterName ? escHtml(theaterName) : 'Theaters';
 
   const laemmleTheaters = LA_THEATERS.filter(t => t.name.startsWith('Laemmle'));
@@ -525,22 +881,10 @@ function renderTheaterNav() {
         ${menuHtml}
       </div>
     </div>
-    <button class="theater-btn${selectedTheater === '__ss250__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
+    <button class="theater-btn${selectedTheater === '__ss250__' || selectedTheater === '__film__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
 
-  const allBtn = nav.querySelector('[data-theater="__all__"]');
-  allBtn.addEventListener('click', () => {
-    selectedTheater = '__all__';
-    closeDropdown();
-    renderTheaterNav();
-    renderTheaterDetail();
-  });
-
-  nav.querySelector('#ss250-btn').addEventListener('click', () => {
-    selectedTheater = '__ss250__';
-    closeDropdown();
-    renderTheaterNav();
-    renderSS250Panel();
-  });
+  nav.querySelector('[data-theater="__all__"]').addEventListener('click', () => goTo('__all__'));
+  nav.querySelector('#ss250-btn').addEventListener('click', () => goTo('__ss250__'));
 
   const dropBtn = nav.querySelector('#theater-dropdown-btn');
   const menu    = nav.querySelector('#theater-dropdown-menu');
@@ -563,11 +907,8 @@ function renderTheaterNav() {
 
   menu.querySelectorAll('.dropdown-item:not(.dropdown-group-header)').forEach(item => {
     item.addEventListener('click', () => {
-      selectedTheater = item.dataset.theater;
       if (item.classList.contains('dropdown-subitem')) laemmleSubmenuOpen = true;
-      closeDropdown();
-      renderTheaterNav();
-      renderTheaterDetail();
+      goTo(item.dataset.theater);
     });
   });
 
@@ -590,6 +931,12 @@ const _tiedRanks = (() => {
 
 function rankLabel(rank) {
   return (_tiedRanks.has(rank) ? '=' : '') + rank;
+}
+
+// Tooltip text, e.g. "#169 (tied) in the 2022 Sight & Sound poll"
+function rankTitle(ss, partnerSS = null) {
+  const one = f => `#${f.rank}${_tiedRanks.has(f.rank) ? ' (tied)' : ''}`;
+  return `${partnerSS ? `${one(ss)} and ${one(partnerSS)}` : one(ss)} in the 2022 Sight & Sound poll`;
 }
 
 // --- Multi-day run helpers ---
@@ -624,18 +971,21 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
   const scheduleUrl = theater ? (typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl) : '#';
   return `
-    <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
-      <span class="screening-date">${escHtml(dateLabel)}</span>
-      <span class="screening-rank">${escHtml(rankStr)}</span>
-      <div class="screening-main">
-        <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
-        <div class="screening-meta">
-          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-          ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+    <div class="screening-item">
+      <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
+        <span class="screening-date">${escHtml(dateLabel)}</span>
+        <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
+        <div class="screening-main">
+          <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${EXTERNAL_MARK}${partnerHtml(partner, ssSecond, partnerSS)}</div>
+          <div class="screening-meta">
+            ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+            ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+            ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+          </div>
         </div>
-      </div>
-    </a>`;
+      </a>
+      ${calButtonHtml(ev, calendarSummary(ss, partner, partnerSS))}
+    </div>`;
 }
 
 function buildGroupRow(group, includeTheater, hashRank = false) {
@@ -656,7 +1006,7 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
   const header = `
     <div class="screening-row screening-group-header" onclick="toggleGroup(${id})" onkeydown="if(event.key==='Enter'||event.key===' ')toggleGroup(${id})" role="button" tabindex="0">
       <span class="screening-date">${escHtml(rangeLabel)}</span>
-      <span class="screening-rank">${escHtml(rankStr)}</span>
+      <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
       <div class="screening-main">
         <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
         <div class="screening-meta">
@@ -668,19 +1018,23 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
     </div>`;
 
   const sep = (partner && !partnerSS) ? ' / ' : ', ';
+  const summary = calendarSummary(ss, partner, partnerSS);
   const children = group.map(({ ev: cev }) => {
     const times = (cev.times || []).join(sep);
     const childDate = formatScreeningDate(cev.date);
     return `
-      <a class="screening-row screening-row-child" href="${escHtml(cev.url || scheduleUrl)}" target="_blank" rel="noopener">
-        <span class="screening-date">${escHtml(childDate)}</span>
-        <span class="screening-rank"></span>
-        <div class="screening-main">
-          <div class="screening-meta">
-            ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+      <div class="screening-item">
+        <a class="screening-row screening-row-child" href="${escHtml(cev.url || scheduleUrl)}" target="_blank" rel="noopener">
+          <span class="screening-date">${escHtml(childDate)}</span>
+          <span class="screening-rank"></span>
+          <div class="screening-main">
+            <div class="screening-meta">
+              ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}${EXTERNAL_MARK}
+            </div>
           </div>
-        </div>
-      </a>`;
+        </a>
+        ${calButtonHtml(cev, summary)}
+      </div>`;
   }).join('');
 
   return `
@@ -716,7 +1070,7 @@ function buildScreeningRows(matches, includeTheater, hashRank = false) {
   return buildScreeningRowsList(matches, includeTheater, hashRank).join('');
 }
 
-// --- Theater detail ---
+// --- Screening views: All Upcoming, one theater, one film ---
 function renderTheaterDetail() {
   const detail = document.getElementById('theater-detail');
 
@@ -730,75 +1084,74 @@ function renderTheaterDetail() {
     return;
   }
 
-  // Reset film filter when leaving All Upcoming
-  if (selectedTheater !== '__all__') filmFilterActive = false;
+  if (selectedTheater === '__film__' && !selectedFilm) selectedTheater = '__all__';
 
-  // "All Upcoming" view
+  let header;
   if (selectedTheater === '__all__') {
-    const today = todayStr();
-    const _FILM_RE = /\b(16mm|35mm|70mm)\b/i;
-    const all = mergeDoubleBills(
-      scraperEvents
-        .filter(e => e.date >= today && (!filmFilterActive || _FILM_RE.test(e.format || '')))
-        .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
-        .filter(({ ss }) => ss !== null)
-        .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
-    );
-
-    const metaText = filmFilterActive
-      ? 'Every Sight &amp; Sound screening across LA playing on either 16mm, 35mm, or 70mm'
-      : 'Every Sight &amp; Sound screening across all LA venues';
-    const emptyText = filmFilterActive
-      ? 'No upcoming film screenings found.'
-      : 'No upcoming Sight &amp; Sound screenings found.';
-    const header = `
+    header = `
       <div class="detail-header">
         <div class="detail-header-left">
           <div class="detail-title-row">
             <div class="detail-theater-name">All Upcoming</div>
-            <button class="theater-btn film-btn${filmFilterActive ? ' film-active' : ''}" onclick="filmFilterActive=!filmFilterActive;renderTheaterDetail()">ON FILM</button>
           </div>
-          <div class="detail-meta">${metaText}</div>
+          <div class="detail-meta">Every Sight &amp; Sound screening across LA venues</div>
         </div>
       </div>`;
+  } else if (selectedTheater === '__film__') {
+    header = filmHeaderHtml(selectedFilm);
+  } else {
+    const theater = LA_THEATERS.find(t => t.name === selectedTheater);
+    if (!theater) { detail.classList.add('hidden'); return; }
+    header = theaterHeaderHtml(theater);
+  }
 
-    if (all.length === 0) {
-      detail.innerHTML = header + `<p class="detail-empty">${emptyText}</p>`;
-    } else {
-      const rows = buildScreeningRowsList(all, true, true);
-      const LIMIT = 12;
-      let listHtml;
-      if (rows.length <= LIMIT) {
-        listHtml = rows.join('');
-      } else {
-        const moreCount = rows.length - LIMIT;
-        listHtml = rows.slice(0, LIMIT).join('')
-          + `<div id="all-screenings-more" class="hidden">${rows.slice(LIMIT).join('')}</div>`
-          + `<button class="show-more-btn" id="show-more-btn" onclick="
-              var m=document.getElementById('all-screenings-more');
-              var hidden=m.classList.toggle('hidden');
-              this.textContent=hidden?'Show all \u2014 ${moreCount} more':'Show less';
-            ">Show all \u2014 ${moreCount} more</button>`;
-      }
-      detail.innerHTML = header + `<div class="screening-list">${listHtml}</div>`;
-    }
-    detail.classList.remove('hidden');
+  detail.innerHTML = header
+    + filterBarHtml({ search: selectedTheater === '__all__' })
+    + listNoteHtml()
+    + `<div id="screening-results"></div>`;
+  renderScreeningResults();
+  detail.classList.remove('hidden');
+}
+
+// Redraws just the list, so the filter bar and search box keep focus
+function renderScreeningResults() {
+  const box = document.getElementById('screening-results');
+  if (!box) return;
+  const isAll = selectedTheater === '__all__';
+  const isFilm = selectedTheater === '__film__';
+  const matches = upcomingMatches({
+    theater: isAll || isFilm ? null : selectedTheater,
+    film: isFilm ? selectedFilm : null,
+    query: isAll ? listQuery : '',
+  });
+  calEvents = new Map();
+
+  if (matches.length === 0) {
+    const narrowed = dateFilter !== 'all' || filmFilterActive || (isAll && listQuery.trim());
+    box.innerHTML = `<p class="detail-empty">${narrowed
+      ? 'No screenings match these filters.'
+      : 'No upcoming Sight &amp; Sound screenings found.'}</p>`;
     return;
   }
 
-  // Theater filter: show filtered list with theater info
-  const theater = LA_THEATERS.find(t => t.name === selectedTheater);
-  if (!theater) { detail.classList.add('hidden'); return; }
+  const rows = buildScreeningRowsList(matches, true, true);
+  const LIMIT = 12;
+  // Only the unfiltered All Upcoming list is long enough to fold
+  if (!isAll || dateFilter !== 'all' || listQuery.trim() || rows.length <= LIMIT) {
+    box.innerHTML = `<div class="screening-list">${rows.join('')}</div>`;
+    return;
+  }
+  const moreCount = rows.length - LIMIT;
+  box.innerHTML = `<div class="screening-list">${rows.slice(0, LIMIT).join('')}
+    <div id="all-screenings-more" class="screening-more hidden">${rows.slice(LIMIT).join('')}</div>
+    <button class="show-more-btn" id="show-more-btn" onclick="
+      var m=document.getElementById('all-screenings-more');
+      var hidden=m.classList.toggle('hidden');
+      this.textContent=hidden?'Show all \u2014 ${moreCount} more':'Show less';
+    ">Show all \u2014 ${moreCount} more</button></div>`;
+}
 
-  const today = todayStr();
-  const all = mergeDoubleBills(
-    scraperEvents
-      .filter(e => e.theater === selectedTheater && e.date >= today)
-      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
-      .filter(({ ss }) => ss !== null)
-      .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
-  );
-
+function theaterHeaderHtml(theater) {
   const typeLabel = { repertory: 'Repertory', arthouse: 'Arthouse', mainstream: 'First Run' }[theater.type] || '';
   const nameStyle = theater.fontFamily ? ` style="font-family:${theater.fontFamily}"` : '';
   if (theater.fontUrl) {
@@ -810,7 +1163,7 @@ function renderTheaterDetail() {
     }
   }
 
-  const header = `
+  return `
     <div class="detail-header">
       <div class="detail-header-left">
         <div class="detail-title-row">
@@ -828,11 +1181,6 @@ function renderTheaterDetail() {
         <a class="detail-schedule-link" href="${typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl}" target="_blank" rel="noopener">Full schedule ↗</a>
       </div>
     </div>`;
-
-  detail.innerHTML = all.length === 0
-    ? header + `<p class="detail-empty">No upcoming Sight &amp; Sound screenings found.</p>`
-    : header + `<div class="screening-list">${buildScreeningRowsList(all, true, true).join('')}</div>`;
-  detail.classList.remove('hidden');
 }
 
 
@@ -859,6 +1207,7 @@ async function loadScraperData() {
     if (!res.ok) return;
     const data = await res.json();
     scraperEvents = data.events || [];
+    showtimesFetchedAt = data.fetched_at || null;
     scraperLoaded = true;
   } catch (e) {
     scraperLoaded = false;
@@ -866,13 +1215,20 @@ async function loadScraperData() {
 }
 
 async function initPage() {
+  bindDetailEvents();
   renderTheaterNav(); // show spinner immediately while polling
   await loadScraperData();
 
-  selectedTheater = '__all__';
-
+  stateFromUrl();
   renderTheaterNav();
-  renderTheaterDetail();
+  renderView();
+  syncUrl(false);  // drop any parameters that didn't resolve
+
+  // Directors and countries, for film pages and screening search
+  fetchSS250Data().then(() => {
+    if (selectedTheater === '__film__') renderTheaterDetail();
+    else if (selectedTheater === '__all__' && listQuery.trim()) renderScreeningResults();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', initPage);
@@ -884,6 +1240,13 @@ setInterval(async () => {
     if (!res.ok) return;
     const data = await res.json();
     scraperEvents = data.events || [];
-    renderTheaterDetail();
+    showtimesFetchedAt = data.fetched_at || showtimesFetchedAt;
+    // Redraw only the results, so a search box keeps its text and focus
+    if (selectedTheater === '__ss250__') renderSS250Grid();
+    else renderScreeningResults();
+    refreshUpdatedLabels();
   } catch (e) { /* ignore — stale data is fine */ }
 }, 60 * 60 * 1000); // every hour
+
+// Keep "Showtimes updated N min ago" current
+setInterval(refreshUpdatedLabels, 60 * 1000);
