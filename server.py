@@ -44,6 +44,41 @@ def _load_events_from_disk():
     except Exception:
         return None
 
+# Where a fresh container gets its first listings. A Railway deploy starts with
+# no files, so there's no disk cache — but the previous deployment is still
+# serving the site until this one passes its healthcheck.
+SEED_URL = os.environ.get('SEED_URL', 'https://ss250la.com/api/showtimes')
+
+def _seed_cache():
+    """Start with the last listings in hand instead of none.
+
+    Until the first scrape finishes (about a minute), an empty cache meant an
+    empty server-rendered list for crawlers and a loading spinner for visitors
+    after every deploy. This runs before the server opens its port, so /health
+    can't pass — and Railway won't switch traffic — until it's done. The first
+    scrape replaces this data as soon as it finishes.
+    """
+    data, source, fetched_at = _load_events_from_disk(), 'disk', None
+    if data and data.get('events'):
+        fetched_at = os.path.getmtime(EVENTS_DISK_CACHE)
+    else:
+        try:
+            r = requests.get(SEED_URL, headers=HEADERS, timeout=10)
+            r.raise_for_status()
+            data, source = r.json(), SEED_URL
+            fetched_at = data.get('fetched_at')
+        except Exception as e:
+            print(f'Seed: nothing on disk and {SEED_URL} failed: {e}', flush=True)
+            return
+    events = (data or {}).get('events') or []
+    if not events:
+        print(f'Seed: {source} had no listings', flush=True)
+        return
+    _cache['data'] = {'events': events, 'errors': data.get('errors') or {}}
+    # Keep the listings' real age, so "Showtimes updated N min ago" stays honest
+    _cache['fetched_at'] = fetched_at or time.time()
+    print(f'Seed: {len(events)} events from {source}', flush=True)
+
 _year_cache = {}  # title -> year int or None
 
 def _lookup_year(title):
@@ -2003,6 +2038,9 @@ def static_files(path):
     return send_from_directory('.', path)
 
 if __name__ == '__main__':
+    # Serve the last listings until the first scrape lands (before the port opens)
+    _seed_cache()
+
     # Start background refresh thread (daemon so it dies with the process)
     t = threading.Thread(target=_refresh_loop, daemon=True)
     t.start()
