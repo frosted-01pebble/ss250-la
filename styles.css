@@ -278,6 +278,7 @@ header h1 span { color: var(--accent); font-style: italic; }
 }
 
 .screening-row {
+  position: relative;
   display: grid;
   grid-template-columns: 7rem 3rem 1fr;
   align-items: start;
@@ -691,8 +692,14 @@ header h1 span { color: var(--accent); font-style: italic; }
   gap: 0.6rem;
   margin-bottom: 0.6rem;
 }
+.nav-search {
+  flex: 0 0 100%;
+  display: flex;
+  justify-content: center;
+}
 .list-search {
-  flex: 1 1 16rem;
+  width: 100%;
+  max-width: 828px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
@@ -734,12 +741,12 @@ header h1 span { color: var(--accent); font-style: italic; }
   font-family: sans-serif;
   margin-bottom: 0.9rem;
 }
-.note-rank { color: var(--accent); font-weight: bold; }
-.updated-label:not(:empty)::before { content: ' · '; }
 
 /* ── Screening row extras ── */
 .screening-item { position: relative; }
-.screening-item > .screening-row { padding-right: 2.6rem; }
+/* Room for the calendar button under the date and the ↗ in the corner */
+.screening-item > .screening-row { padding-right: 1.9rem; min-height: 4.3rem; }
+.screening-item.is-child > .screening-row { min-height: 3.5rem; }
 .screening-more {
   display: flex;
   flex-direction: column;
@@ -747,14 +754,13 @@ header h1 span { color: var(--accent); font-style: italic; }
 }
 .cal-btn {
   position: absolute;
-  top: 50%;
-  right: 0.5rem;
-  transform: translateY(-50%);
+  top: 1.95rem;
+  left: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.6rem;
+  height: 1.6rem;
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -763,11 +769,15 @@ header h1 span { color: var(--accent); font-style: italic; }
   transition: color 0.15s, border-color 0.15s;
 }
 .cal-btn:hover, .cal-btn:focus-visible { color: var(--accent); border-color: var(--border); outline: none; }
+.screening-item.is-child .cal-btn { top: 1.55rem; }
 .external-mark {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
   font-style: normal;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
+  line-height: 1;
   color: var(--muted);
-  margin-left: 0.35rem;
 }
 .screening-row:hover .external-mark { color: var(--accent); }
 .sr-only {
@@ -898,9 +908,12 @@ html, body { overflow-x: hidden; }
     font-size: 0.68rem;
   }
 
-  /* Filters */
+  /* Filters and row extras */
   .filter-bar { gap: 0.5rem; }
-  .list-search { flex-basis: 100%; }
+  .screening-item > .screening-row { min-height: 4rem; }
+  .cal-btn { top: 1.75rem; left: 0.3rem; }
+  .screening-item.is-child .cal-btn { top: 1.4rem; }
+  .external-mark { top: 0.5rem; right: 0.5rem; }
 
   /* SS250 grid — 2 columns on mobile */
   .ss250-grid {

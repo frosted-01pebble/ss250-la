@@ -501,11 +501,9 @@ function playingFilmCounts() {
 }
 
 // --- Filter bar and list note ---
-function filterBarHtml({ search }) {
+function filterBarHtml() {
   return `
     <div class="filter-bar">
-      ${search ? `<input class="list-search" type="search" value="${escHtml(listQuery)}"
-        placeholder="Search title, director, theater, or decade (e.g. 1970s)…" aria-label="Search screenings">` : ''}
       <div class="filter-chips" role="group" aria-label="Filter screenings">
         ${DATE_FILTERS.map(f => `<button type="button" class="filter-chip${dateFilter === f.key ? ' active' : ''}" data-when="${f.key}" aria-pressed="${dateFilter === f.key}">${f.label}</button>`).join('')}
         <button type="button" class="theater-btn film-btn${filmFilterActive ? ' film-active' : ''}" data-onfilm aria-pressed="${filmFilterActive}" title="Only 35mm, 70mm and 16mm prints">ON FILM</button>
@@ -538,11 +536,7 @@ function refreshUpdatedLabels() {
 }
 
 function listNoteHtml() {
-  return `
-    <p class="list-note">
-      <span class="note-rank">#10</span> = rank in the 2022 Sight &amp; Sound poll
-      · Rows open the theater's page ↗<span class="updated-label">${updatedLabel()}</span>
-    </p>`;
+  return `<p class="list-note"><span class="updated-label">${updatedLabel()}</span></p>`;
 }
 
 function filmHeaderHtml(film) {
@@ -665,7 +659,8 @@ function bindDetailEvents() {
       }
     }
   });
-  detail.addEventListener('input', e => {
+  // The search box sits in the nav, outside the panel
+  document.addEventListener('input', e => {
     if (!e.target.matches('.list-search')) return;
     listQuery = e.target.value;
     renderScreeningResults();
@@ -730,7 +725,7 @@ function renderSS250Grid() {
   if (ss250Reverse) films.reverse();
 
   if (films.length === 0) {
-    const message = q ? `No films match "${escHtml(ss250Query)}"` : 'None of the 250 are playing in LA right now.';
+    const message = q ? `No films match "${escHtml(ss250Query)}"` : 'None of the 250 have upcoming screenings in LA.';
     container.innerHTML = `<p class="detail-empty" style="grid-column:1/-1;text-align:center;padding:2rem 0">${message}</p>`;
     return;
   }
@@ -746,7 +741,7 @@ function renderSS250Grid() {
             ? `<img src="${escHtml(f.poster)}" alt="${escHtml(f.title)}" loading="lazy">`
             : `<div class="ss250-poster-placeholder">🎬</div>`}
           <span class="ss250-rank" title="${escHtml(rankTitle(f))}">${rankLabel(f.rank)}</span>
-          ${days ? `<span class="ss250-now">Now playing</span>` : ''}
+          ${days ? `<span class="ss250-now">Playing soon</span>` : ''}
         </div>
       </a>
       <div class="ss250-card-info">
@@ -779,7 +774,7 @@ function renderSS250Panel() {
       100 to 250 films, opening the canon to more global and contemporary cinema.</p>
       <p>Below is the full 2022 list — 250 films that, according to the world's leading film minds,
       represent the pinnacle of cinema. Posters link to each film's IMDb page; films marked
-      <em>Now playing</em> link to their upcoming screenings in LA.</p>
+      <em>Playing soon</em> link to their upcoming screenings in LA.</p>
     </div>`;
 
   if (!ss250Data) {
@@ -797,7 +792,7 @@ function renderSS250Panel() {
         <button class="ss250-sort-btn${ss250Sort === 'year'  ? ' active' : ''}" onclick="ss250Sort='year';renderSS250Grid();this.parentNode.querySelectorAll('.ss250-sort-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Year</button>
       </div>
       <button class="ss250-reverse-btn${ss250Reverse ? ' active' : ''}" title="Reverse order" onclick="ss250Reverse=!ss250Reverse;renderSS250Grid();this.classList.toggle('active')">⇅</button>
-      <button class="ss250-reverse-btn ss250-playing-btn${ss250PlayingOnly ? ' active' : ''}" title="Only films screening in LA" onclick="ss250PlayingOnly=!ss250PlayingOnly;this.classList.toggle('active');renderSS250Grid();syncUrl(false)">Playing now</button>
+      <button class="ss250-reverse-btn ss250-playing-btn${ss250PlayingOnly ? ' active' : ''}" title="Only films screening in LA" onclick="ss250PlayingOnly=!ss250PlayingOnly;this.classList.toggle('active');renderSS250Grid();syncUrl(false)">Playing soon</button>
     </div>`;
 
   detail.innerHTML = about + toolbar + `<div class="ss250-grid" id="ss250-grid"></div>`;
@@ -881,7 +876,12 @@ function renderTheaterNav() {
         ${menuHtml}
       </div>
     </div>
-    <button class="theater-btn${selectedTheater === '__ss250__' || selectedTheater === '__film__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>`;
+    <button class="theater-btn${selectedTheater === '__ss250__' || selectedTheater === '__film__' ? ' active' : ''}" id="ss250-btn">S&amp;S 250</button>
+    ${selectedTheater === '__all__' ? `
+    <div class="nav-search">
+      <input class="list-search" type="search" value="${escHtml(listQuery)}"
+        placeholder="Search title, director, theater, or decade (e.g. 1970s)…" aria-label="Search screenings">
+    </div>` : ''}`;
 
   nav.querySelector('[data-theater="__all__"]').addEventListener('click', () => goTo('__all__'));
   nav.querySelector('#ss250-btn').addEventListener('click', () => goTo('__ss250__'));
@@ -1023,7 +1023,7 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
     const times = (cev.times || []).join(sep);
     const childDate = formatScreeningDate(cev.date);
     return `
-      <div class="screening-item">
+      <div class="screening-item is-child">
         <a class="screening-row screening-row-child" href="${escHtml(cev.url || scheduleUrl)}" target="_blank" rel="noopener">
           <span class="screening-date">${escHtml(childDate)}</span>
           <span class="screening-rank"></span>
@@ -1106,7 +1106,7 @@ function renderTheaterDetail() {
   }
 
   detail.innerHTML = header
-    + filterBarHtml({ search: selectedTheater === '__all__' })
+    + filterBarHtml()
     + listNoteHtml()
     + `<div id="screening-results"></div>`;
   renderScreeningResults();
