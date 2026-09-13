@@ -1074,28 +1074,20 @@ def _fetch_nuart_session_times(movie_url_map):
 
 
 def _nuart_movie_paths():
-    """Fetch the static allMovie query to get id->path mapping."""
-    # Determine today's build date from the homepage JS src
-    try:
-        r0 = requests.get('https://www.landmarktheatres.com/', headers=HEADERS, timeout=10)
-        m = re.search(r'webediamovies\.pro/prod/landmarktheatres/(\d{4}-\d{2}-\d{2})/', r0.text)
-        build = m.group(1) if m else date.today().strftime('%Y-%m-%d')
-    except Exception:
-        build = date.today().strftime('%Y-%m-%d')
+    """Movie id -> page path ("5120" -> "/movies/5120-singin-in-the-rain-1952/").
 
-    paths = {}
+    Read from the sitemap. The old source, a Gatsby static-query file named by a
+    content hash, silently 404'd once the site rebuilt, which left every Nuart
+    listing linking to the theater page. The exact path matters: /movies/5120/
+    renders an empty page.
+    """
     try:
-        r = requests.get(
-            f'https://cms-assets.webediamovies.pro/prod/landmarktheatres/{build}/public/page-data/sq/d/3360083659.json',
-            headers=HEADERS, timeout=15
-        )
-        if r.status_code == 200:
-            for m in r.json()['data']['allMovie']['nodes']:
-                if m.get('path'):
-                    paths[m['id']] = m['path']
+        r = requests.get('https://www.landmarktheatres.com/sitemap-0.xml',
+                         headers=HEADERS, timeout=15)
     except Exception:
-        pass
-    return paths
+        return {}
+    return {mid: path for path, mid in re.findall(
+        r'<loc>https://www\.landmarktheatres\.com(/movies/(\d+)-[^<]*)</loc>', r.text)}
 
 
 def fetch_nuart_events():
@@ -1158,11 +1150,12 @@ def fetch_nuart_events():
         if not poster_url:
             poster_url = m.get('poster')
         path = path_map.get(mid) or ''
-        url = (f'https://www.landmarktheatres.com{path}?theater=X00CW' if path
-               else 'https://www.landmarktheatres.com/theaters/x00cw-landmark-nuart-theatre-west-los-angeles')
 
         for d in days:
             times = session_times.get((mid_str, d), [])
+            # The film page opens on the Nuart's showtimes for that date
+            url = (f'https://www.landmarktheatres.com{path}?theater=X00CW&date={d}' if path
+                   else 'https://www.landmarktheatres.com/theaters/x00cw-landmark-nuart-theatre-west-los-angeles')
             events.append({
                 'theater': 'Landmark Nuart Theatre',
                 'title':   title,
