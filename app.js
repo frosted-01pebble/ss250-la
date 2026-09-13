@@ -985,6 +985,9 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const scheduleUrl = theater ? (typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl) : '#';
   const url = ev.url || scheduleUrl;
   const summary = calendarSummary(ss, partner, partnerSS);
+  // Every piece is a direct grid item, placed on a shared line by CSS:
+  // line 1 date · rank · title · theater, line 2 icons · director · time,
+  // line 3 "followed by …" · format
   return `
     <div class="screening-row">
       <div class="screening-date-col">
@@ -992,15 +995,12 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
         ${rowActionsHtml(ev, url, summary)}
       </div>
       <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
-      <div class="screening-main">
-        <div class="screening-title"><a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener"><em>${escHtml(ss.title)}</em></a> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
-        ${directorHtml(ss, partnerSS)}
-        <div class="screening-meta">
-          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-          ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
-        </div>
-      </div>
+      <div class="screening-title"><a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener"><em>${escHtml(ss.title)}</em></a> <span class="screening-year">(${ss.year})</span>${partnerSS ? partnerHtml(partner, ssSecond, partnerSS) : ''}</div>
+      ${directorHtml(ss, partnerSS)}
+      ${partnerSS ? '' : partnerHtml(partner, ssSecond, null)}
+      ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+      ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
+      ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
     </div>`;
 }
 
@@ -1021,17 +1021,14 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
 
   const header = `
     <div class="screening-row screening-group-header" onclick="toggleGroup(${id})" onkeydown="if(event.key==='Enter'||event.key===' ')toggleGroup(${id})" role="button" tabindex="0">
-      <span class="screening-date">${escHtml(rangeLabel)}</span>
+      <div class="screening-date-col"><span class="screening-date">${escHtml(rangeLabel)}</span></div>
       <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
-      <div class="screening-main">
-        <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
-        ${directorHtml(ss, partnerSS)}
-        <div class="screening-meta">
-          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-          <span class="screening-count" id="group-arrow-${id}" data-count="${dates.length}">▶ ${dates.length}</span>
-        </div>
-      </div>
+      <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerSS ? partnerHtml(partner, ssSecond, partnerSS) : ''}</div>
+      ${directorHtml(ss, partnerSS)}
+      ${partnerSS ? '' : partnerHtml(partner, ssSecond, null)}
+      ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+      <span class="screening-count" id="group-arrow-${id}" data-count="${dates.length}">▶ ${dates.length}</span>
+      ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
     </div>`;
 
   const sep = (partner && !partnerSS) ? ' / ' : ', ';
@@ -1046,14 +1043,9 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
           <span class="screening-date">${escHtml(childDate)}</span>
           ${rowActionsHtml(cev, url, summary)}
         </div>
-        <span class="screening-rank"></span>
-        <div class="screening-main">
-          <div class="screening-meta">
-            <a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener">${times
-              ? `<span class="screening-time">${escHtml(times)}</span>`
-              : `<span class="sr-only">Open ${escHtml(summary)} on ${escHtml(childDate)}</span>`}</a>
-          </div>
-        </div>
+        <a class="row-link screening-child-link" href="${escHtml(url)}" target="_blank" rel="noopener">${times
+          ? `<span class="screening-time">${escHtml(times)}</span>`
+          : `<span class="sr-only">Open ${escHtml(summary)} on ${escHtml(childDate)}</span>`}</a>
       </div>`;
   }).join('');
 

@@ -277,24 +277,25 @@ def upcoming_matches(events, ss_list, today):
 
 
 def _row_html(ev, ss, today):
+    # Same grid items as app.js's buildSingleRow, so the pre-JS list lays out
+    # on the same lines as the interactive one that replaces it
     times = ', '.join(ev.get('times') or [])
     fmt = ' / '.join(p.strip() for p in (ev.get('format') or '').split(',') if p.strip())
-    meta = ''
+    details = ''
     if ev.get('theater'):
-        meta += f'<span class="screening-theater">{esc(ev["theater"])}</span>'
-    if fmt:
-        meta += f'<span class="screening-format">{esc(fmt)}</span>'
+        details += f'<span class="screening-theater">{esc(ev["theater"])}</span>'
     if times:
-        meta += f'<span class="screening-time">{esc(times)}</span>'
+        details += f'<span class="screening-time">{esc(times)}</span>'
+    if fmt:
+        details += f'<span class="screening-format">{esc(fmt)}</span>'
     return (
         f'<a class="screening-row" href="{esc(ev.get("url") or "/")}" target="_blank" rel="noopener">'
-        f'<span class="screening-date">{esc(format_date(ev.get("date") or "", today))}</span>'
+        f'<div class="screening-date-col">'
+        f'<span class="screening-date">{esc(format_date(ev.get("date") or "", today))}</span></div>'
         f'<span class="screening-rank">#{esc(ss.get("rank"))}</span>'
-        f'<div class="screening-main">'
         f'<div class="screening-title"><em>{esc(ss["title"])}</em> '
         f'<span class="screening-year">({esc(ss.get("year"))})</span></div>'
-        f'<div class="screening-meta">{meta}</div>'
-        f'</div></a>'
+        f'{details}</a>'
     )
 
 

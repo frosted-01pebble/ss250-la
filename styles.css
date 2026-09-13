@@ -278,12 +278,22 @@ header h1 span { color: var(--accent); font-style: italic; }
   gap: 0.3rem;
 }
 
+/* Four evenly spaced columns on three shared lines, so everything on a line
+   lines up across columns:
+     line 1  date · rank · title · theater        (one baseline)
+     line 2  icons · director · time              (one center line)
+     line 3  "followed by …" · format             (one baseline)  */
 .screening-row {
   position: relative;
   display: grid;
-  grid-template-columns: 7rem 3rem 1fr;
-  align-items: start;
-  gap: 0.6rem;
+  grid-template-columns: 5.5rem 2.25rem minmax(0, 1fr) auto;
+  grid-template-rows: auto 1.5rem minmax(1.1rem, auto);
+  grid-template-areas:
+    "date rank title    theater"
+    "date .    director time"
+    "date .    partner  format";
+  column-gap: 1rem;
+  align-items: baseline;
   padding: 0.7rem 0.85rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -302,24 +312,19 @@ header h1 span { color: var(--accent); font-style: italic; }
   color: var(--muted);
   font-family: sans-serif;
   white-space: nowrap;
-  padding-top: 0.1rem;
 }
 .screening-rank {
+  grid-area: rank;
+  justify-self: end;  /* #3, #84 and #169 line up on their last digit */
   font-size: 0.75rem;
   font-weight: bold;
   color: var(--accent);
   font-family: sans-serif;
   white-space: nowrap;
-  padding-top: 0.1rem;
-}
-.screening-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  padding-left: 0.4rem;
 }
 .screening-title {
+  grid-area: title;
+  min-width: 0;
   font-size: 0.9rem;
   line-height: 1.3;
 }
@@ -336,43 +341,34 @@ header h1 span { color: var(--accent); font-style: italic; }
   font-style: normal;
 }
 .screening-partner-line {
+  grid-area: partner;
   display: block;
   font-size: 0.65rem;
   color: var(--muted);
   font-family: sans-serif;
-  margin-top: 0.15rem;
   font-style: italic;
 }
-.screening-meta {
-  display: flex;
-  flex-direction: row;
-  gap: 0;
-  justify-content: flex-end;
-  align-items: center;
-}
-/* Separators trail each item rather than lead the next, so a line that wraps
-   on a phone ends with "·" instead of starting with one */
-.screening-meta > span { white-space: nowrap; }
-.screening-meta > span:not(:last-of-type)::after {
-  content: '·';
-  color: var(--muted);
-  margin: 0 0.35rem;
-}
-.screening-theater {
-  font-size: 0.73rem;
-  color: var(--muted);
-  font-family: sans-serif;
-}
-.screening-format {
-  font-size: 0.73rem;
-  color: var(--muted);
-  font-family: sans-serif;
-}
+/* Theater, time and format: one each on lines 1–3, right-aligned */
+.screening-theater,
+.screening-format,
 .screening-time {
   font-size: 0.73rem;
   color: var(--muted);
   font-family: sans-serif;
+  white-space: nowrap;
 }
+.screening-row > .screening-theater,
+.screening-row > .screening-time,
+.screening-row > .screening-format,
+.screening-row > .screening-count,
+.screening-child-link {
+  justify-self: end;
+  text-align: right;
+}
+.screening-row > .screening-theater { grid-area: theater; }
+.screening-row > .screening-time,
+.screening-row > .screening-count { grid-area: time; align-self: center; }
+.screening-row > .screening-format { grid-area: format; }
 
 /* ── Multi-day run groups ── */
 .screening-group-header {
@@ -392,6 +388,14 @@ header h1 span { color: var(--accent); font-style: italic; }
   padding-top: 0.35rem;
   padding-bottom: 0.35rem;
 }
+/* A single date in a run: its time sits on line 1 with the date, icons on line 2 */
+.screening-row.screening-row-child {
+  grid-template-rows: auto 1.5rem;
+  grid-template-areas:
+    "date rank title theater"
+    "date .    .     .";
+}
+.screening-child-link { grid-area: theater; }
 .screening-row-child:hover {
   border-color: var(--accent);
   background: #201c0d;
@@ -762,19 +766,25 @@ header h1 span { color: var(--accent); font-style: italic; }
 }
 .screening-row:has(.row-link:focus-visible) { border-color: var(--accent); }
 .screening-row .screening-rank { position: relative; z-index: 1; }
+/* The date column shares the row's lines (subgrid), so the date keeps line 1's
+   baseline and the icons sit on line 2 with the director */
 .screening-date-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  grid-area: date;
+  display: grid;
+  grid-template-rows: subgrid;
+  justify-items: center;
   justify-self: start;
+  align-items: baseline;
 }
+.screening-date-col > .screening-date { grid-row: 1; }
 /* Zero width, so the icons center on the date text and overflow it evenly */
 .row-actions {
+  grid-row: 2;
+  align-self: center;
   width: 0;
   display: flex;
   justify-content: center;
   gap: 0.2rem;
-  margin-top: 0.3rem;
 }
 .row-action {
   position: relative;
@@ -803,6 +813,8 @@ header h1 span { color: var(--accent); font-style: italic; }
   text-decoration: none;
 }
 .screening-director {
+  grid-area: director;
+  align-self: center;
   font-size: 0.73rem;
   color: var(--muted);
   font-family: sans-serif;
@@ -909,12 +921,29 @@ html, body { overflow-x: hidden; }
     font-size: 0.75rem;
   }
 
-  /* Screening rows */
+  /* Screening rows: no room for a fourth column, so theater, time and format
+     stack right-aligned under the director, one per line */
   .screening-row {
-    grid-template-columns: 4.5rem 2.4rem 1fr;
-    gap: 0.4rem;
+    grid-template-columns: 4.5rem 2rem minmax(0, 1fr);
+    grid-template-rows: auto 1.5rem auto auto auto auto;
+    grid-template-areas:
+      "date rank title"
+      "date .    director"
+      "date .    partner"
+      "date .    theater"
+      "date .    time"
+      "date .    format";
+    column-gap: 0.6rem;
     padding: 0.6rem 0.65rem;
   }
+  .screening-row.screening-row-child {
+    grid-template-rows: auto 1.5rem;
+    grid-template-areas:
+      "date . theater"
+      "date . .";
+  }
+  .screening-row > .screening-time,
+  .screening-row > .screening-count { align-self: baseline; }
   .screening-date {
     font-size: 0.72rem;
   }
@@ -923,11 +952,6 @@ html, body { overflow-x: hidden; }
   }
   .screening-title {
     font-size: 0.85rem;
-  }
-  .screening-meta {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 0;
   }
   .screening-theater,
   .screening-director,
