@@ -557,7 +557,20 @@ function filmHeaderHtml(film) {
 
 // --- Add to calendar ---
 const CAL_ICON = `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 8.5v3.5M6.25 10.25h3.5"/></svg>`;
-const EXTERNAL_MARK = `<i class="external-mark" aria-hidden="true">↗</i><small class="sr-only"> (opens the theater's site in a new tab)</small>`;
+// Directors come from the S&S 250 details, which load just after the listings
+function directorHtml(ss, partnerSS) {
+  const names = [ss, partnerSS].filter(Boolean).map(f => (ssDetails(f) || {}).director).filter(Boolean);
+  return names.length ? `<div class="screening-director">Dir. ${escHtml(names.join(' / '))}</div>` : '';
+}
+
+// Calendar and ↗ buttons under a row's date; ↗ opens the same page as the row itself
+function rowActionsHtml(ev, url, summary) {
+  return `
+    <div class="row-actions">
+      ${calButtonHtml(ev, summary)}
+      <a class="row-action" href="${escHtml(url)}" target="_blank" rel="noopener" title="Open on the theater's site" aria-label="Open ${escHtml(summary)} on the theater's site">↗</a>
+    </div>`;
+}
 
 let calEvents = new Map();
 let _calCounter = 0;
@@ -572,7 +585,7 @@ function calButtonHtml(ev, summary) {
   const id = _calCounter++;
   calEvents.set(id, { ev, summary });
   const label = `Add ${summary} on ${formatScreeningDate(ev.date)} to your calendar`;
-  return `<button type="button" class="cal-btn" data-cal="${id}" title="Add to calendar" aria-label="${escHtml(label)}">${CAL_ICON}</button>`;
+  return `<button type="button" class="row-action cal-btn" data-cal="${id}" title="Add to calendar" aria-label="${escHtml(label)}">${CAL_ICON}</button>`;
 }
 
 function icsText(s) {
@@ -970,21 +983,24 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const dateLabel = formatScreeningDate(ev.date);
   const theater = LA_THEATERS.find(t => t.name === ev.theater);
   const scheduleUrl = theater ? (typeof theater.scheduleUrl === 'function' ? theater.scheduleUrl() : theater.scheduleUrl) : '#';
+  const url = ev.url || scheduleUrl;
+  const summary = calendarSummary(ss, partner, partnerSS);
   return `
-    <div class="screening-item">
-      <a class="screening-row" href="${escHtml(ev.url || scheduleUrl)}" target="_blank" rel="noopener">
+    <div class="screening-row">
+      <div class="screening-date-col">
         <span class="screening-date">${escHtml(dateLabel)}</span>
-        <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
-        <div class="screening-main">
-          <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${EXTERNAL_MARK}${partnerHtml(partner, ssSecond, partnerSS)}</div>
-          <div class="screening-meta">
-            ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
-            ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
-            ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
-          </div>
+        ${rowActionsHtml(ev, url, summary)}
+      </div>
+      <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
+      <div class="screening-main">
+        <div class="screening-title"><a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener"><em>${escHtml(ss.title)}</em></a> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
+        ${directorHtml(ss, partnerSS)}
+        <div class="screening-meta">
+          ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
+          ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
+          ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}
         </div>
-      </a>
-      ${calButtonHtml(ev, calendarSummary(ss, partner, partnerSS))}
+      </div>
     </div>`;
 }
 
@@ -1009,6 +1025,7 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
       <span class="screening-rank" title="${escHtml(rankTitle(ss, partnerSS))}">${escHtml(rankStr)}</span>
       <div class="screening-main">
         <div class="screening-title"><em>${escHtml(ss.title)}</em> <span class="screening-year">(${ss.year})</span>${partnerHtml(partner, ssSecond, partnerSS)}</div>
+        ${directorHtml(ss, partnerSS)}
         <div class="screening-meta">
           ${includeTheater ? `<span class="screening-theater">${escHtml(ev.theater)}</span>` : ''}
           ${fmt ? `<span class="screening-format">${escHtml(fmt)}</span>` : ''}
@@ -1022,18 +1039,21 @@ function buildGroupRow(group, includeTheater, hashRank = false) {
   const children = group.map(({ ev: cev }) => {
     const times = (cev.times || []).join(sep);
     const childDate = formatScreeningDate(cev.date);
+    const url = cev.url || scheduleUrl;
     return `
-      <div class="screening-item is-child">
-        <a class="screening-row screening-row-child" href="${escHtml(cev.url || scheduleUrl)}" target="_blank" rel="noopener">
+      <div class="screening-row screening-row-child">
+        <div class="screening-date-col">
           <span class="screening-date">${escHtml(childDate)}</span>
-          <span class="screening-rank"></span>
-          <div class="screening-main">
-            <div class="screening-meta">
-              ${times ? `<span class="screening-time">${escHtml(times)}</span>` : ''}${EXTERNAL_MARK}
-            </div>
+          ${rowActionsHtml(cev, url, summary)}
+        </div>
+        <span class="screening-rank"></span>
+        <div class="screening-main">
+          <div class="screening-meta">
+            <a class="row-link" href="${escHtml(url)}" target="_blank" rel="noopener">${times
+              ? `<span class="screening-time">${escHtml(times)}</span>`
+              : `<span class="sr-only">Open ${escHtml(summary)} on ${escHtml(childDate)}</span>`}</a>
           </div>
-        </a>
-        ${calButtonHtml(cev, summary)}
+        </div>
       </div>`;
   }).join('');
 
@@ -1224,10 +1244,10 @@ async function initPage() {
   renderView();
   syncUrl(false);  // drop any parameters that didn't resolve
 
-  // Directors and countries, for film pages and screening search
+  // Directors and countries, for the rows, film pages, and screening search
   fetchSS250Data().then(() => {
     if (selectedTheater === '__film__') renderTheaterDetail();
-    else if (selectedTheater === '__all__' && listQuery.trim()) renderScreeningResults();
+    else if (selectedTheater !== '__ss250__') renderScreeningResults();
   });
 }
 
