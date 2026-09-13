@@ -11,7 +11,7 @@ from flask_compress import Compress
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-import json, re, traceback, threading, time, os, html as html_lib
+import base64, json, re, traceback, threading, time, os, html as html_lib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ssr
 from datetime import datetime, date, timedelta
@@ -1594,6 +1594,30 @@ _CULVER_PREFIXES = (
     'Rewind or Die: ', 'Hellraisers: ', 'From Culver With Love: ',
 )
 
+_CULVER_BASE = 'https://web.theculvertheater.com'
+_REVIVALHOUSES_KEY = b'RHs'
+
+def _culver_film_url(anchor_attrs):
+    """The film's own page on the Culver site, e.g. /films/Movie-Mad-Mondays-Stalker/HO00000709.
+
+    RevivalHouses' visible link is just the theater homepage; the real one is in
+    the title link's data-f attribute, base64 XOR'd with a short repeating key
+    that their script decodes on click. Returns None if it's absent or no longer
+    decodes to a film path (say, the key changes), so the listing keeps its old link.
+    """
+    m = re.search(r'data-f="([^"]+)"', anchor_attrs or '')
+    if not m:
+        return None
+    try:
+        raw = base64.b64decode(m.group(1))
+        path = bytes(b ^ _REVIVALHOUSES_KEY[i % len(_REVIVALHOUSES_KEY)]
+                     for i, b in enumerate(raw)).decode('utf-8')
+    except Exception:
+        return None
+    if not re.fullmatch(r'/films/[\w\-.%]+/HO\d+', path):
+        return None
+    return _CULVER_BASE + path
+
 def fetch_culver_events():
     """The Culver Theater (Culver City) — scraped via RevivalHouses.com.
     The theater's own site (web.theculvertheater.com) blocks server-side access
@@ -1608,7 +1632,7 @@ def fetch_culver_events():
 
     pattern = re.compile(
         r'<img[^>]+src="([^"]+)"[^>]*>.*?'
-        r'<cite>([^<]+)</cite>.*?'
+        r'<a\b([^>]*)>\s*<cite>([^<]+)</cite>.*?'
         r'Movie__time--date\">([^<]+)</p>.*?'
         r'<time>([^<]+)</time>(.*?)'
         r'href="(https://web\.theculvertheater[^"]+)"',
@@ -1617,7 +1641,8 @@ def fetch_culver_events():
 
     events = []
     for m in pattern.finditer(r.text):
-        raw_poster, raw_title, raw_date, raw_time, note, url = m.groups()
+        raw_poster, title_link_attrs, raw_title, raw_date, raw_time, note, url = m.groups()
+        url = _culver_film_url(title_link_attrs) or url
 
         # Strip series prefix to get bare film title
         title = raw_title.strip()
