@@ -81,42 +81,91 @@ function findSSMatch(tmdbMovie) {
   return null;
 }
 
-// Match scraper title against S&S list — handles "in 35mm", "(Alt Title)", combined programs
-function findSSMatchByTitle(rawTitle) {
-  const stripFormats = t => t.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim();
-  const stripParens  = t => t.replace(/\s*\([^)]+\)/g, '').trim();
+// A same-titled film from another year is not the S&S film: "RIVER" (2026) is not
+// Renoir's The River (1951). A little slack covers festival-vs-release dates.
+const YEAR_TOLERANCE = 2;
 
-  const variants = new Set([rawTitle]);
-  variants.add(stripFormats(rawTitle));
-  variants.add(stripParens(rawTitle));
-  variants.add(stripParens(stripFormats(rawTitle)));
+// What follows " with " in a real screening of the film — "Nosferatu with Live
+// Orchestra". Anything else is probably the rest of a different film's title:
+// "The Thing with Two Heads" is not The Thing.
+const WITH_EXTRAS_RE = /\b(live|orchestra|quarkestra|score|q\s*&\s*a|in person|intro|guest|director|filmmaker|cast|crew|discussion|conversation|panel|accompaniment|organ|wurlitzer|special)/i;
+
+const stripFormats = t => t.replace(/\s+in\s+(35mm|70mm|16mm|4k|4K|DCP|HD|IMAX|digital)(\s+.*)?$/i, '').trim();
+const stripParens  = t => t.replace(/\s*\([^)]+\)/g, '').trim();
+
+function parenYear(t) {
+  const years = new Set([...t.matchAll(/\((\d{4})\)/g)].map(m => m[1]));
+  return years.size === 1 ? parseInt([...years][0], 10) : null;
+}
+
+function matchesAnySSTitle(t) {
+  const bare = stripParens(stripFormats(t));
+  return SS250_CANONICAL.some(ss => titlesMatch(ss.title, bare, ''));
+}
+
+// Candidate film titles within one listing title (or one double-bill half) —
+// handles "in 35mm", "(Alt Title)", "Series: Film", and combined programs
+function titleVariants(t) {
+  const variants = new Set([t]);
+  variants.add(stripFormats(t));
+  variants.add(stripParens(t));
+  variants.add(stripParens(stripFormats(t)));
 
   // Strip "Prefix: " colon-prefixes (e.g. "Calm Morning: My Neighbor Totoro")
-  const colonIdx = rawTitle.indexOf(': ');
+  const colonIdx = t.indexOf(': ');
   if (colonIdx > 0) {
-    const afterColon = rawTitle.slice(colonIdx + 2).trim();
+    const afterColon = t.slice(colonIdx + 2).trim();
     variants.add(afterColon);
     variants.add(stripFormats(afterColon));
     variants.add(stripParens(afterColon));
   }
 
-  // Split double features: strip year annotations first so "(1972)" doesn't block matching
-  const cleanForSplit = stripParens(rawTitle);
-  for (const sep of [' with ', ' + ', ' / ', ' & ', '/']) {
-    const src = rawTitle.includes(sep) ? rawTitle : (cleanForSplit.includes(sep) ? cleanForSplit : null);
+  const cleanForSplit = stripParens(t);
+  for (const sep of [' with ', ' + ', ' & ']) {
+    const src = t.includes(sep) ? t : (cleanForSplit.includes(sep) ? cleanForSplit : null);
     if (!src) continue;
-    for (const part of src.split(sep)) {
+    const parts = src.split(sep);
+    parts.forEach((part, i) => {
+      if (sep === ' with ' && i < parts.length - 1) {
+        const rest = parts.slice(i + 1).join(sep);
+        if (!WITH_EXTRAS_RE.test(rest) && !matchesAnySSTitle(rest)) return;
+      }
       variants.add(part.trim());
       variants.add(stripParens(part.trim()));
       variants.add(stripFormats(part.trim()));
       variants.add(stripParens(stripFormats(part.trim())));
+    });
+  }
+  variants.delete('');
+  return variants;
+}
+
+// Match scraper title against S&S list. evYear is the release year the venue
+// gives for the film, if any. A double bill is matched half by half, each half
+// checked against its own "(1972)" annotation, since a single event year can't
+// say which half it belongs to.
+function findSSMatchByTitle(rawTitle, evYear = null) {
+  const hasSlash = rawTitle.includes('/');
+  const segments = [[rawTitle, parenYear(rawTitle) ?? (hasSlash ? null : evYear)]];
+  if (hasSlash) {
+    const seen = new Set([rawTitle]);
+    for (const sep of [' / ', '/']) {
+      if (!rawTitle.includes(sep)) continue;
+      for (const s of rawTitle.split(sep)) {
+        const seg = s.trim();
+        if (seg && !seen.has(seg)) {
+          seen.add(seg);
+          segments.push([seg, parenYear(seg)]);
+        }
+      }
     }
   }
 
-  for (const v of variants) {
-    if (!v) continue;
-    for (const ss of SS250_CANONICAL) {
-      if (titlesMatch(ss.title, v, '')) return ss;
+  for (const [seg, segYear] of segments) {
+    for (const v of titleVariants(seg)) {
+      for (const ss of SS250_CANONICAL) {
+        if (titlesMatch(ss.title, v, '') && (!segYear || Math.abs(ss.year - segYear) <= YEAR_TOLERANCE)) return ss;
+      }
     }
   }
   return null;
@@ -273,7 +322,7 @@ function getUpcomingSSForTheater(theaterName) {
   const today = todayStr();
   const matches = scraperEvents
     .filter(e => e.theater === theaterName && e.date >= today)
-    .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+    .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
     .filter(({ ss }) => ss !== null)
     .sort((a, b) => a.ev.date.localeCompare(b.ev.date));
   return mergeDoubleBills(matches);
@@ -691,7 +740,7 @@ function renderTheaterDetail() {
     const all = mergeDoubleBills(
       scraperEvents
         .filter(e => e.date >= today && (!filmFilterActive || _FILM_RE.test(e.format || '')))
-        .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+        .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
         .filter(({ ss }) => ss !== null)
         .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
     );
@@ -745,7 +794,7 @@ function renderTheaterDetail() {
   const all = mergeDoubleBills(
     scraperEvents
       .filter(e => e.theater === selectedTheater && e.date >= today)
-      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title)) }))
+      .map(ev => ({ ev, ss: findSSMatchByTitle(stripEntities(ev.title), ev.year) }))
       .filter(({ ss }) => ss !== null)
       .sort((a, b) => a.ev.date.localeCompare(b.ev.date) || a.ss.rank - b.ss.rank)
   );

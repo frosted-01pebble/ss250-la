@@ -70,6 +70,7 @@ _DOUBLE_SEP = re.compile(r' / |/')
 
 def _enrich_double_features(events):
     """For double-feature titles, embed TMDB release year into each part that lacks one."""
+    ss_list = _load_ss250_from_js()
     for ev in events:
         title = ev.get('title', '')
         if '/' not in title:
@@ -79,7 +80,11 @@ def _enrich_double_features(events):
         enriched = []
         changed = False
         for part in parts:
-            if re.search(r'\(\d{4}\)', part):
+            # The matcher rejects a half whose "(year)" isn't the S&S film's, and
+            # TMDB's top hit for "Nosferatu" is the remake — so don't guess a
+            # year for a half that is an S&S title. The listing shows the S&S
+            # year for those anyway.
+            if re.search(r'\(\d{4}\)', part) or ssr.find_ss_match(part, ss_list):
                 enriched.append(part)
             else:
                 year = _lookup_year(part)
@@ -90,6 +95,62 @@ def _enrich_double_features(events):
                     enriched.append(part)
         if changed:
             ev['title'] = f' / '.join(enriched)
+
+# ── Release years ──────────────────────────────────────────────────────────────
+# Matching is by title, so a new film that shares a title with an S&S film
+# ("RIVER", 2026, vs Renoir's The River) was listed as the classic. Each event
+# carries the venue's own release year where one is available, and the matchers
+# in ssr.py / app.js reject an S&S title whose year doesn't fit.
+
+_ANNIVERSARY_RE = re.compile(r'\b(\d{1,3})(?:st|nd|rd|th)\s+Anniversary', re.I)
+
+def _anniversary_year(text, date_str):
+    """"30th Anniversary" on a 2026 screening → 1996."""
+    m = _ANNIVERSARY_RE.search(text or '')
+    if not m or not date_str:
+        return None
+    return int(date_str[:4]) - int(m.group(1))
+
+_NEWBEV_YEAR_RE = re.compile(r'<dt>\s*Year\s*</dt>\s*<dd>\s*(\d{4})', re.I)
+_newbev_year_cache = {}  # program url -> year or None
+
+def _fetch_newbev_year(url):
+    if url in _newbev_year_cache:
+        return _newbev_year_cache[url]
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+    except Exception:
+        return None  # don't cache a network failure
+    m = _NEWBEV_YEAR_RE.search(r.text)
+    year = int(m.group(1)) if m else None
+    _newbev_year_cache[url] = year
+    return year
+
+def _fill_release_years(events):
+    """Add a release year to single-film events whose scraper didn't supply one.
+
+    New Beverly lists the year only on the program page, so those are fetched —
+    but only for titles that look like S&S films, and cached by URL, so it's a
+    handful of requests per refresh rather than one per listing.
+    """
+    ss_list = _load_ss250_from_js()
+    newbev = []
+    for ev in events:
+        title = ev.get('title') or ''
+        if ev.get('year') or '/' in title:
+            continue
+        year = _anniversary_year(title, ev.get('date'))
+        if year:
+            ev['year'] = year
+        elif (ev.get('source') == 'newbeverly' and ev.get('url')
+              and ssr.find_ss_match(ssr.strip_entities(title), ss_list)):
+            newbev.append(ev)
+    urls = list({ev['url'] for ev in newbev})
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        years = dict(zip(urls, ex.map(_fetch_newbev_year, urls)))
+    for ev in newbev:
+        if years.get(ev['url']):
+            ev['year'] = years[ev['url']]
 
 def _build_cache():
     global _loading_progress
@@ -149,6 +210,7 @@ def _build_cache():
                 results['events'].append(ev)
 
     _enrich_double_features(results['events'])
+    _fill_release_years(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
     _save_events_to_disk(results)
@@ -339,6 +401,14 @@ def fetch_ac_venue(theater_name, location_term_id):
                 body_years = _extract_body_film_years(body)
                 title = _enrich_title_with_body_years(title, body_years)
 
+            # Release year of the film (single-film events only — for a double
+            # feature it can't say which half it describes)
+            details = acf.get('event_details') or {}
+            year = None
+            if '/' not in title and isinstance(details, dict):
+                ym = re.search(r'\b(1[89]\d\d|20\d\d)\b', str(details.get('release_year') or ''))
+                year = int(ym.group(1)) if ym else None
+
             # Dates — may be range; only keep future events
             date_raw = hero.get('dates') or '' if isinstance(hero, dict) else ''
             time_raw = hero.get('times') or '' if isinstance(hero, dict) else ''
@@ -357,6 +427,7 @@ def fetch_ac_venue(theater_name, location_term_id):
                     'url':     e.get('link') or '',
                     'poster':  poster_url,
                     'source':  'americancinematheque',
+                    'year':    year,
                 })
 
         total_pages = int(r.headers.get('X-WP-TotalPages', 1))
@@ -600,9 +671,16 @@ def fetch_academy_events():
                     'https://www.academymuseum.org/en/calendar'
         fmt       = prog.get('filmFormat1') or prog.get('filmFormat2') or ''
 
+        # filmMetadata1 reads "1979 | 161 min | USSR | ..." — skip programs with
+        # a second film, where one year can't describe the event
+        meta = prog.get('filmMetadata1') or {}
+        meta_text = _extract_rich_text(meta.get('json') if isinstance(meta, dict) else None)
+        ym = re.match(r'\s*(\d{4})\s*\|', meta_text)
+        year = int(ym.group(1)) if ym and not prog.get('filmMetadata2') else None
+
         candidates.append({'title': title, 'd0': d0, 'd1': d1,
                            'tk_id': tk_id, 'url': url,
-                           'poster': poster, 'format': fmt})
+                           'poster': poster, 'format': fmt, 'year': year})
 
     # Fetch session times in parallel
     tk_to_time = {}
@@ -630,6 +708,7 @@ def fetch_academy_events():
                 'url':     c['url'],
                 'poster':  c['poster'],
                 'source':  'academy',
+                'year':    c['year'],
             })
             cur += timedelta(days=1)
 
@@ -1288,7 +1367,7 @@ def fetch_oldtownmusichall_events():
     from datetime import timezone, timedelta as td
 
     query = ('query { showingsForDate(siteIds: [321]) { data { '
-             'id time movie { name urlSlug posterImage } } } }')
+             'id time movie { name urlSlug posterImage synopsis } } } }')
     headers = {
         **HEADERS,
         'Content-Type': 'application/json',
@@ -1320,6 +1399,11 @@ def fetch_oldtownmusichall_events():
         url = (f'https://www.oldtownmusichall.org/movie/{url_slug}' if url_slug
                else 'https://www.oldtownmusichall.org/all-programs/')
 
+        # The synopsis opens with the year ("1922 - Silent • ..."). Their
+        # releaseDate field is not reliable: Nosferatu's is the 2024 remake's.
+        synopsis = html_lib.unescape(re.sub(r'<[^>]+>', '', movie.get('synopsis') or ''))
+        ym = re.match(r'\s*(\d{4})\b', synopsis)
+
         events.append({
             'theater': 'Old Town Music Hall',
             'title':   title,
@@ -1329,6 +1413,7 @@ def fetch_oldtownmusichall_events():
             'url':     url,
             'poster':  poster,
             'source':  'oldtownmusichall',
+            'year':    int(ym.group(1)) if ym else None,
         })
     return events
 
@@ -1356,14 +1441,14 @@ def fetch_culver_events():
         r'<img[^>]+src="([^"]+)"[^>]*>.*?'
         r'<cite>([^<]+)</cite>.*?'
         r'Movie__time--date\">([^<]+)</p>.*?'
-        r'<time>([^<]+)</time>.*?'
+        r'<time>([^<]+)</time>(.*?)'
         r'href="(https://web\.theculvertheater[^"]+)"',
         re.DOTALL
     )
 
     events = []
     for m in pattern.finditer(r.text):
-        raw_poster, raw_title, raw_date, raw_time, url = m.groups()
+        raw_poster, raw_title, raw_date, raw_time, note, url = m.groups()
 
         # Strip series prefix to get bare film title
         title = raw_title.strip()
@@ -1397,6 +1482,8 @@ def fetch_culver_events():
             'url':     url,
             'poster':  poster,
             'source':  'culver',
+            # Notes like "30th Anniversary." are the only year hint here
+            'year':    _anniversary_year(note, d.strftime('%Y-%m-%d')),
         })
     return events
 

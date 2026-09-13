@@ -123,12 +123,41 @@ def _strip_parens(t):
     return _PARENS_RE.sub('', t).strip()
 
 
-def find_ss_match(raw_title, ss_list):
-    """Match a scraped listing title against the S&S list.
+# A same-titled film from another year is not the S&S film: "RIVER" (2026) is not
+# Renoir's The River (1951). A little slack covers festival-vs-release dates.
+YEAR_TOLERANCE = 2
+
+_PAREN_YEAR_RE = re.compile(r'\((\d{4})\)')
+
+# What follows " with " in a real screening of the film — "Nosferatu with Live
+# Orchestra". Anything else is probably the rest of a different film's title:
+# "The Thing with Two Heads" is not The Thing.
+_WITH_EXTRAS_RE = re.compile(
+    r'\b(live|orchestra|quarkestra|score|q\s*&\s*a|in person|intro|guest|director|'
+    r'filmmaker|cast|crew|discussion|conversation|panel|accompaniment|organ|'
+    r'wurlitzer|special)', re.I)
+
+
+def _paren_year(t):
+    years = set(_PAREN_YEAR_RE.findall(t))
+    return int(years.pop()) if len(years) == 1 else None
+
+
+def _year_ok(ss, year):
+    return not year or abs(ss['year'] - year) <= YEAR_TOLERANCE
+
+
+def _matches_any_ss_title(t, ss_list):
+    bare = _strip_parens(_strip_formats(t))
+    return any(titles_match(ss['title'], bare) for ss in ss_list)
+
+
+def _title_variants(t, ss_list):
+    """Candidate film titles within one listing title (or one double-bill half).
 
     Handles "in 35mm" suffixes, "(Alt Title)" parentheticals, "Series Name: Film"
-    prefixes, and double features. Order matters: variants are tried in insertion
-    order, mirroring the JS Set.
+    prefixes, and "with"/"+"/"&" combined programs. Order matters: variants are
+    tried in insertion order, mirroring the JS Set.
     """
     variants = []
 
@@ -137,36 +166,68 @@ def find_ss_match(raw_title, ss_list):
         if v and v not in variants:
             variants.append(v)
 
-    add(raw_title)
-    add(_strip_formats(raw_title))
-    add(_strip_parens(raw_title))
-    add(_strip_parens(_strip_formats(raw_title)))
+    add(t)
+    add(_strip_formats(t))
+    add(_strip_parens(t))
+    add(_strip_parens(_strip_formats(t)))
 
-    colon = raw_title.find(': ')
+    colon = t.find(': ')
     if colon > 0:
-        after = raw_title[colon + 2:].strip()
+        after = t[colon + 2:].strip()
         add(after)
         add(_strip_formats(after))
         add(_strip_parens(after))
 
-    clean_for_split = _strip_parens(raw_title)
-    for sep in (' with ', ' + ', ' / ', ' & ', '/'):
-        if sep in raw_title:
-            src = raw_title
+    clean_for_split = _strip_parens(t)
+    for sep in (' with ', ' + ', ' & '):
+        if sep in t:
+            src = t
         elif sep in clean_for_split:
             src = clean_for_split
         else:
             continue
-        for part in src.split(sep):
+        parts = src.split(sep)
+        for i, part in enumerate(parts):
+            if sep == ' with ' and i < len(parts) - 1:
+                rest = sep.join(parts[i + 1:])
+                if not _WITH_EXTRAS_RE.search(rest) and not _matches_any_ss_title(rest, ss_list):
+                    continue
+            part = part.strip()
             add(part)
-            add(_strip_parens(part.strip()))
-            add(_strip_formats(part.strip()))
-            add(_strip_parens(_strip_formats(part.strip())))
+            add(_strip_parens(part))
+            add(_strip_formats(part))
+            add(_strip_parens(_strip_formats(part)))
+    return variants
 
-    for v in variants:
-        for ss in ss_list:
-            if titles_match(ss['title'], v):
-                return ss
+
+def find_ss_match(raw_title, ss_list, year=None):
+    """Match a scraped listing title against the S&S list.
+
+    `year` is the release year the venue gives for the film, if any. A double
+    bill is matched half by half, each half checked against its own "(1972)"
+    annotation, since a single event year can't say which half it belongs to.
+    """
+    has_slash = '/' in raw_title
+    whole_year = _paren_year(raw_title)
+    if whole_year is None and not has_slash:
+        whole_year = year
+    segments = [(raw_title, whole_year)]
+    if has_slash:
+        seen = {raw_title}
+        for sep in (' / ', '/'):
+            if sep not in raw_title:
+                continue
+            for seg in raw_title.split(sep):
+                seg = seg.strip()
+                if seg and seg not in seen:
+                    seen.add(seg)
+                    segments.append((seg, _paren_year(seg)))
+
+    for seg, seg_year in segments:
+        for v in _title_variants(seg, ss_list):
+            for ss in ss_list:
+                if titles_match(ss['title'], v) and _year_ok(ss, seg_year):
+                    return ss
     return None
 
 
@@ -208,7 +269,7 @@ def upcoming_matches(events, ss_list, today):
         date = ev.get('date') or ''
         if date < today:
             continue
-        ss = find_ss_match(strip_entities(ev.get('title') or ''), ss_list)
+        ss = find_ss_match(strip_entities(ev.get('title') or ''), ss_list, ev.get('year'))
         if ss:
             matches.append((ev, ss))
     matches.sort(key=lambda m: (m[0].get('date') or '', m[1].get('rank') or 0))
