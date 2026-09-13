@@ -4,4 +4,3 @@ flask-cors
 tzdata
 requests
 beautifulsoup4
-playwright

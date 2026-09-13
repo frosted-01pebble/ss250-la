@@ -978,98 +978,48 @@ def fetch_braindead_events():
 
     return unique
 
-def _fetch_nuart_session_times(movie_url_map):
-    """
-    Use async Playwright to visit all Nuart movie pages IN PARALLEL, clicking
-    date buttons and capturing schedule API responses.
+def _fetch_nuart_session_times(movie_ids, last_day):
+    """{(movie_id, 'YYYY-MM-DD'): ['5:10 PM', ...]} from Landmark's schedule API.
 
-    Returns: {(movie_id_str, date_str): [time_str, ...]}
+    One plain request covers every film and date. This used to drive headless
+    Chromium through each film page, clicking date buttons to catch this same
+    response — slow, and on Railway it came back empty, so Nuart showed no times.
     """
-    import asyncio
+    if not movie_ids:
+        return {}
+    theater = json.dumps({'id': 'X00CW', 'timeZone': 'America/Los_Angeles'}, separators=(',', ':'))
+    # Days run 3am to 3am, as the site requests them, so after-midnight shows
+    # stay with the evening they belong to. Start from today in Pacific time.
+    params = ([('from', f'{ssr.today_str()}T03:00:00'),
+               ('to', f'{(date.fromisoformat(last_day) + timedelta(days=1)).isoformat()}T03:00:00'),
+               ('theaters', theater)]
+              + [('movieIds', mid) for mid in movie_ids])
     try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        print("Nuart: playwright not installed — times will be empty")
+        r = requests.get('https://www.landmarktheatres.com/api/gatsby-source-boxofficeapi/schedule',
+                         params=params, headers=HEADERS, timeout=30)
+        schedule = ((r.json() or {}).get('X00CW') or {}).get('schedule') or {}
+    except Exception as e:
+        print(f'Nuart: schedule request failed: {e}')
         return {}
 
     result = {}
-    day_abbrevs = ['SAT', 'SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI']
-
-    def _parse_response_data(data):
-        if not isinstance(data, dict):
-            return
-        for theater_data in data.values():
-            if not isinstance(theater_data, dict):
-                continue
-            for mid, dates in (theater_data.get('schedule') or {}).items():
-                if not isinstance(dates, dict):
-                    continue
-                for d_str, sessions in dates.items():
-                    if not isinstance(sessions, list):
-                        continue
-                    for session in sessions:
-                        if not isinstance(session, dict) or session.get('isExpired'):
-                            continue
-                        starts_at = session.get('startsAt') or ''
-                        if not starts_at:
-                            continue
-                        try:
-                            dt = datetime.fromisoformat(starts_at)
-                            h = dt.hour % 12 or 12
-                            t_str = f"{h}:{dt.strftime('%M')} {'AM' if dt.hour < 12 else 'PM'}"
-                        except Exception:
-                            t_str = starts_at[11:16]
-                        key = (str(mid), d_str)
-                        result.setdefault(key, [])
-                        if t_str not in result[key]:
-                            result[key].append(t_str)
-
-    async def fetch_one(context, mid, url):
-        page = await context.new_page()
-        async def on_response(response):
-            if 'gatsby-source-boxofficeapi/schedule' not in response.url or response.status != 200:
-                return
-            try:
-                _parse_response_data(await response.json())
-            except Exception:
-                pass
-        page.on('response', on_response)
-        try:
-            await page.goto(url, wait_until='domcontentloaded', timeout=25000)
-            await page.wait_for_timeout(1500)
-            try:
-                accept = page.locator('button:has-text("Accept and Continue")')
-                if await accept.count() > 0:
-                    await accept.first.click(timeout=2000)
-                    await page.wait_for_timeout(500)
-            except Exception:
-                pass
-            for btn in await page.locator('button:enabled').all():
+    for mid, dates in schedule.items():
+        if not isinstance(dates, dict):
+            continue
+        for d_str, sessions in dates.items():
+            starts = sorted(s['startsAt'] for s in (sessions or [])
+                            if isinstance(s, dict) and s.get('startsAt') and not s.get('isExpired'))
+            times = []
+            for starts_at in starts:
                 try:
-                    if any(d in (await btn.inner_text()).strip().upper() for d in day_abbrevs):
-                        await btn.click(timeout=2000)
-                        await page.wait_for_timeout(800)
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f"Nuart playwright error for {url}: {e}")
-        finally:
-            await page.close()
-
-    async def run_all():
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent=HEADERS['User-Agent'])
-            await asyncio.gather(*[fetch_one(context, mid, url)
-                                   for mid, url in movie_url_map.items()])
-            await browser.close()
-
-    try:
-        asyncio.run(run_all())
-    except Exception as e:
-        print(f"Nuart async playwright failed: {e}")
-
-    print(f"Nuart: fetched times for {len(result)} (movie, date) pairs")
+                    dt = datetime.fromisoformat(starts_at)
+                    t_str = f"{dt.hour % 12 or 12}:{dt.strftime('%M')} {'AM' if dt.hour < 12 else 'PM'}"
+                except ValueError:
+                    t_str = starts_at[11:16]
+                if t_str not in times:
+                    times.append(t_str)
+            if times:
+                result[(str(mid), d_str)] = times
     return result
 
 
@@ -1129,17 +1079,11 @@ def fetch_nuart_events():
             for m in (r2.json() or []):
                 movies[m['id']] = m
 
-    # Step 3: build url map for Playwright time fetching
-    movie_url_map = {}
-    for mid in upcoming:
-        path = path_map.get(mid) or ''
-        if path:
-            movie_url_map[str(mid)] = f'https://www.landmarktheatres.com{path}?theater=X00CW'
+    # Step 3: session times for every film and date, in one request
+    last_day = max(d for days in upcoming.values() for d in days)
+    session_times = _fetch_nuart_session_times([str(mid) for mid in upcoming], last_day)
 
-    # Step 4: fetch session times via Playwright (browser-only API)
-    session_times = _fetch_nuart_session_times(movie_url_map) if movie_url_map else {}
-
-    # Step 5: build events
+    # Step 4: build events
     events = []
     for mid, days in upcoming.items():
         mid_str = str(mid)
