@@ -942,8 +942,8 @@ function buildSingleRow(ev, ss, includeTheater, hashRank = false) {
   const url = ev.url || scheduleUrl;
   const summary = calendarSummary(ss, partner, partnerSS);
   // Every piece is a direct grid item, placed on a shared line by CSS:
-  // line 1 date · rank · title, line 2 calendar · director,
-  // line 3 "followed by …" · theater · format · time
+  // line 1 date · rank · title, line 2 calendar · director · theater · format · time,
+  // and a double feature's "followed by …" on a third line when there is one
   return `
     <div class="screening-row">
       <div class="screening-date-col">
