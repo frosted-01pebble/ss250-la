@@ -152,6 +152,174 @@ def _fill_release_years(events):
         if years.get(ev['url']):
             ev['year'] = years[ev['url']]
 
+# Theaters that publish no year (Laemmle, Vidiots, Alamo, Nuart, the Veezi
+# venues...) get a title check instead. If TMDB knows another film by the same
+# title as the S&S film, the listing's poster or its own page usually says which
+# one it is. With no evidence either way, a same-titled film that is in its
+# theatrical window is the likelier one to be playing.
+
+_RIVALS_TTL = 86400  # re-search daily so new releases show up
+_MAX_RIVALS = 8
+_rivals_cache = {}     # S&S title -> (fetched_at, (S&S film's TMDB id, [rival dicts]))
+_tmdb_meta_cache = {}  # (kind, TMDB id) -> images/credits json
+_page_text_cache = {}  # listing url -> page text
+
+# Signs a listing is a repertory screening rather than a new release: a film
+# print, a restoration, or an anniversary
+_REVIVAL_HINT_RE = re.compile(r'\b(35\s?mm|70\s?mm|16\s?mm|restor\w*|anniversary)\b', re.I)
+
+_POSTER_TOKEN_RE = re.compile(r'/([A-Za-z0-9]{26,32})(?:-[a-z0-9]+)*\.(?:jpe?g|png|webp)\b', re.I)
+
+def _ss_rivals(ss):
+    """(TMDB id of the S&S film, other same-titled films on TMDB) for an S&S entry."""
+    now = time.time()
+    hit = _rivals_cache.get(ss['title'])
+    if hit and now - hit[0] < _RIVALS_TTL:
+        return hit[1]
+    # "RIVER" matches The River, so search without the article too
+    queries = {ss['title'], re.sub(r"^(the|a|an|la|le|les|l')\s+", '', ss['title'], flags=re.I)}
+    found = {}
+    for q in queries:
+        for page in (1, 2):
+            try:
+                r = requests.get('https://api.themoviedb.org/3/search/movie',
+                                 params={'api_key': TMDB_KEY, 'query': q, 'page': page},
+                                 headers=HEADERS, timeout=10)
+                results = r.json().get('results', [])
+            except Exception:
+                return (None, [])  # not cached — a failed lookup decides nothing
+            for res in results:
+                if (ssr.titles_match(ss['title'], res.get('title') or '')
+                        or ssr.titles_match(ss['title'], res.get('original_title') or '')):
+                    found[res['id']] = res
+            if len(results) < 20:
+                break
+
+    ss_film, rivals = None, []
+    for res in found.values():
+        released = res.get('release_date') or ''
+        if not re.match(r'\d{4}-\d{2}-\d{2}$', released):
+            continue
+        year = int(released[:4])
+        if abs(year - ss['year']) <= ssr.YEAR_TOLERANCE:
+            if ss_film is None or res.get('vote_count', 0) > ss_film.get('vote_count', 0):
+                ss_film = res
+        elif res.get('vote_count', 0) >= 1:
+            # Zero-vote entries are mostly shorts and student films, not theatrical releases
+            rivals.append({'id': res['id'], 'year': year, 'date': released,
+                           'votes': res.get('vote_count', 0)})
+    rivals.sort(key=lambda r: -r['votes'])
+    value = (ss_film['id'] if ss_film else None, rivals)
+    _rivals_cache[ss['title']] = (now, value)
+    return value
+
+def _tmdb_meta(kind, tmdb_id):
+    key = (kind, tmdb_id)
+    if key not in _tmdb_meta_cache:
+        try:
+            r = requests.get(f'https://api.themoviedb.org/3/movie/{tmdb_id}/{kind}',
+                             params={'api_key': TMDB_KEY}, headers=HEADERS, timeout=10)
+            r.raise_for_status()
+            _tmdb_meta_cache[key] = r.json()
+        except Exception:
+            return {}
+    return _tmdb_meta_cache[key]
+
+def _tmdb_image_ids(tmdb_id):
+    data = _tmdb_meta('images', tmdb_id)
+    return {img['file_path'].strip('/').rsplit('.', 1)[0]
+            for kind in ('posters', 'backdrops') for img in data.get(kind, [])
+            if img.get('file_path')}
+
+def _tmdb_directors(tmdb_id):
+    return [c['name'] for c in _tmdb_meta('credits', tmdb_id).get('crew', [])
+            if c.get('job') == 'Director' and c.get('name')]
+
+def _page_text(url):
+    if url not in _page_text_cache:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=10)
+        except Exception:
+            return ''
+        text = re.sub(r'<script.*?</script>|<style.*?</style>', ' ', r.text, flags=re.S | re.I)
+        _page_text_cache[url] = html_lib.unescape(re.sub(r'<[^>]+>', ' ', text))
+    return _page_text_cache[url]
+
+def _recent_rival_year(rivals, date_str, before_days=180, after_days=365):
+    """Year of a rival released within its theatrical window of the screening:
+    up to ~6 months before, or up to a year after (festival premieres)."""
+    try:
+        screening = datetime.strptime(date_str or '', '%Y-%m-%d').date()
+    except ValueError:
+        return None
+    for r in sorted(rivals, key=lambda r: r['date'], reverse=True):
+        released = datetime.strptime(r['date'], '%Y-%m-%d').date()
+        if -after_days <= (screening - released).days <= before_days:
+            return r['year']
+    return None
+
+def _identify_listing(ev, ss, shared_urls):
+    """Release year for a no-year listing of an S&S title, or None to leave it as is."""
+    ss_id, rivals = _ss_rivals(ss)
+    if not rivals:
+        return None  # the title is unambiguous
+    # Poster and director lookups cost a TMDB call per film, so check the
+    # best-known rivals plus anything recent — a new release has few votes
+    # ("RIVER", 2026, had 2) and would never make a votes-only cut.
+    recent_cutoff = int((ev.get('date') or '0')[:4] or 0) - 1
+    checked = rivals[:_MAX_RIVALS] + [r for r in rivals[_MAX_RIVALS:] if r['year'] >= recent_cutoff]
+    candidates = [(tmdb_id, year) for tmdb_id, year in
+                  [(ss_id, ss['year'])] + [(r['id'], r['year']) for r in checked] if tmdb_id]
+
+    # Culver and Vidiots use TMDB's own poster files
+    m = _POSTER_TOKEN_RE.search(ev.get('poster') or '')
+    if m:
+        for tmdb_id, year in candidates:
+            if m.group(1) in _tmdb_image_ids(tmdb_id):
+                return year
+
+    # A director named on the listing's own page (Laemmle, Brain Dead, ...).
+    # Skip URLs shared by several titles — a theater homepage says nothing.
+    url = ev.get('url') or ''
+    if url and url not in shared_urls:
+        text = _page_text(url)
+        named = {year for tmdb_id, year in candidates
+                 if any(re.search(r'\b' + re.escape(d) + r'\b', text, re.I)
+                        for d in _tmdb_directors(tmdb_id))}
+        # Venue metadata can carry the wrong film's credits (Old Town's 1922
+        # Nosferatu page lists the 2024 remake's director), so the S&S film's
+        # year on the page counts too — conflicting evidence is no evidence.
+        if re.search(r'\b%d\b' % ss['year'], text):
+            named.add(ss['year'])
+        if len(named) == 1:
+            return named.pop()
+
+    if _REVIVAL_HINT_RE.search(f"{ev.get('title') or ''} {ev.get('format') or ''}"):
+        return ss['year']
+
+    return _recent_rival_year(rivals, ev.get('date'))
+
+def _identify_yearless_listings(events):
+    ss_list = _load_ss250_from_js()
+    titles_by_url = {}
+    for ev in events:
+        titles_by_url.setdefault(ev.get('url'), set()).add(ev.get('title'))
+    shared_urls = {url for url, titles in titles_by_url.items() if len(titles) > 1}
+
+    todo = []
+    for ev in events:
+        title = ev.get('title') or ''
+        if ev.get('year') or '/' in title:
+            continue
+        ss = ssr.find_ss_match(ssr.strip_entities(title), ss_list)
+        if ss:
+            todo.append((ev, ss))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        years = list(ex.map(lambda p: _identify_listing(p[0], p[1], shared_urls), todo))
+    for (ev, _), year in zip(todo, years):
+        if year:
+            ev['year'] = year
+
 def _build_cache():
     global _loading_progress
     today_str = date.today().strftime('%Y-%m-%d')
@@ -211,6 +379,7 @@ def _build_cache():
 
     _enrich_double_features(results['events'])
     _fill_release_years(results['events'])
+    _identify_yearless_listings(results['events'])
     _cache['data'] = results
     _cache['fetched_at'] = time.time()
     _save_events_to_disk(results)

@@ -81,8 +81,26 @@ def main():
         if got_py != want or got_js != want:
             failures += 1
             print(f'FAIL {title!r} year={year}: want {want!r}, ssr.py {got_py!r}, app.js {got_js!r}')
-    print(f'{len(CASES) - failures}/{len(CASES)} passed')
-    return 1 if failures else 0
+    print(f'{len(CASES) - failures}/{len(CASES)} matcher cases passed')
+
+    # Listings with no year and no poster/page evidence: is a same-titled
+    # film in its theatrical window? (rivals, screening date, expected year)
+    from server import _recent_rival_year
+    river = [{'id': 1, 'year': 2026, 'date': '2026-09-10', 'votes': 2}]
+    rival_cases = [
+        (river, '2026-09-30', 2026),   # plays weeks after release
+        (river, '2026-01-15', 2026),   # festival premiere ahead of release
+        (river, '2027-06-01', None),   # long out of theaters: the classic
+        ([{'id': 2, 'year': 2025, 'date': '2025-09-15', 'votes': 1}], '2026-09-21', None),
+    ]
+    rival_failures = 0
+    for rivals, date_str, want in rival_cases:
+        got = _recent_rival_year(rivals, date_str)
+        if got != want:
+            rival_failures += 1
+            print(f'FAIL rival {rivals[0]["date"]} screening {date_str}: want {want}, got {got}')
+    print(f'{len(rival_cases) - rival_failures}/{len(rival_cases)} rival-window cases passed')
+    return 1 if failures or rival_failures else 0
 
 
 if __name__ == '__main__':
